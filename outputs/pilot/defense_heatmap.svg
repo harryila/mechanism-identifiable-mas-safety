@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="950" height="497" viewBox="0 0 950 497">
+<rect width="100%" height="100%" fill="#fbfaf7"/>
+<style>text{font-family:Inter,Arial,sans-serif;fill:#202124}.title{font-size:20px;font-weight:700}.label{font-size:12px}.value{font-size:15px;font-weight:700}.note{font-size:11px;fill:#5f6368}</style>
+<text class="title" x="20" y="30">Pilot LGH rate by mechanism and defense</text>
+<text class="note" x="20" y="50">Deterministic harness oracle — not empirical model evidence</text>
+<text class="label" x="20" y="95">Model: scripted-oracle-v1</text>
+<text class="label" text-anchor="middle" x="278.0" y="118">Intent Decomposition</text>
+<text class="label" text-anchor="middle" x="424.0" y="118">Context Fragmentation</text>
+<text class="label" text-anchor="middle" x="570.0" y="118">Authorization Drift</text>
+<text class="label" text-anchor="middle" x="716.0" y="118">Policy Heterogeneity</text>
+<text class="label" text-anchor="middle" x="852.0" y="118">Safe utility</text>
+<text class="label" x="20" y="169">Local Only</text>
+<rect x="207" y="134" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="278.0" y="169">1.00</text>
+<rect x="353" y="134" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="424.0" y="169">1.00</text>
+<rect x="499" y="134" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="570.0" y="169">1.00</text>
+<rect x="645" y="134" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="716.0" y="169">1.00</text>
+<rect x="797" y="134" width="110" height="58" rx="5" fill="#d8eadf"/>
+<text class="value" text-anchor="middle" x="852.0" y="169">1.00</text>
+<text class="label" x="20" y="231">History Monitor</text>
+<rect x="207" y="196" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="278.0" y="231">0.00</text>
+<rect x="353" y="196" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="424.0" y="231">1.00</text>
+<rect x="499" y="196" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="570.0" y="231">1.00</text>
+<rect x="645" y="196" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="716.0" y="231">1.00</text>
+<rect x="797" y="196" width="110" height="58" rx="5" fill="#d8eadf"/>
+<text class="value" text-anchor="middle" x="852.0" y="231">1.00</text>
+<text class="label" x="20" y="293">Source Anchoring</text>
+<rect x="207" y="258" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="278.0" y="293">1.00</text>
+<rect x="353" y="258" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="424.0" y="293">1.00</text>
+<rect x="499" y="258" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="570.0" y="293">0.00</text>
+<rect x="645" y="258" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="716.0" y="293">0.00</text>
+<rect x="797" y="258" width="110" height="58" rx="5" fill="#d8eadf"/>
+<text class="value" text-anchor="middle" x="852.0" y="293">1.00</text>
+<text class="label" x="20" y="355">Provenance Carrying</text>
+<rect x="207" y="320" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="278.0" y="355">0.00</text>
+<rect x="353" y="320" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="424.0" y="355">0.00</text>
+<rect x="499" y="320" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="570.0" y="355">0.00</text>
+<rect x="645" y="320" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="716.0" y="355">0.00</text>
+<rect x="797" y="320" width="110" height="58" rx="5" fill="#d8eadf"/>
+<text class="value" text-anchor="middle" x="852.0" y="355">1.00</text>
+<text class="label" x="20" y="417">Policy Intersection</text>
+<rect x="207" y="382" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="278.0" y="417">1.00</text>
+<rect x="353" y="382" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="424.0" y="417">1.00</text>
+<rect x="499" y="382" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="570.0" y="417">1.00</text>
+<rect x="645" y="382" width="142" height="58" rx="5" fill="#cfe8d5"/>
+<text class="value" text-anchor="middle" x="716.0" y="417">0.00</text>
+<rect x="797" y="382" width="110" height="58" rx="5" fill="#d8eadf"/>
+<text class="value" text-anchor="middle" x="852.0" y="417">1.00</text>
+<text class="note" x="20" y="475">Lower LGH is better; utility is completion on matched-safe workflows.</text>
+</svg>

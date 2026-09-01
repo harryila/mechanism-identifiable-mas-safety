@@ -1,0 +1,11 @@
+model_id,comparison,mechanism_a,mechanism_b,spearman_rho,kendall_tau_b
+scripted-oracle-v1,raw_pooled_vs_mechanism,pooled,intent_decomposition,0.235702,0.223607
+scripted-oracle-v1,raw_pooled_vs_mechanism,pooled,context_fragmentation,0.816497,0.774597
+scripted-oracle-v1,raw_pooled_vs_mechanism,pooled,authorization_drift,0.942809,0.894427
+scripted-oracle-v1,raw_pooled_vs_mechanism,pooled,policy_heterogeneity,0.544331,0.516398
+scripted-oracle-v1,raw_mechanism_pair,intent_decomposition,context_fragmentation,0.57735,0.57735
+scripted-oracle-v1,raw_mechanism_pair,intent_decomposition,authorization_drift,0.0,0.0
+scripted-oracle-v1,raw_mechanism_pair,intent_decomposition,policy_heterogeneity,-0.57735,-0.57735
+scripted-oracle-v1,raw_mechanism_pair,context_fragmentation,authorization_drift,0.57735,0.57735
+scripted-oracle-v1,raw_mechanism_pair,context_fragmentation,policy_heterogeneity,0.333333,0.333333
+scripted-oracle-v1,raw_mechanism_pair,authorization_drift,policy_heterogeneity,0.57735,0.57735

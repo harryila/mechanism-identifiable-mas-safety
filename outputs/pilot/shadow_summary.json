@@ -1,0 +1,16 @@
+{
+  "interpretation": "Coverage/observability audit only; not a closed-loop adaptation estimate.",
+  "mode": "frozen_local_only_proposals",
+  "replay_evaluation_count": 80,
+  "source_trace_count": 16,
+  "unsafe_block_counts": {
+    "authorization_drift:provenance_carrying": 2,
+    "authorization_drift:source_anchoring": 2,
+    "context_fragmentation:provenance_carrying": 2,
+    "intent_decomposition:history_monitor": 2,
+    "intent_decomposition:provenance_carrying": 2,
+    "policy_heterogeneity:policy_intersection": 2,
+    "policy_heterogeneity:provenance_carrying": 2,
+    "policy_heterogeneity:source_anchoring": 2
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/mas-safety/trace.schema.json",
+  "title": "Complete compositional-safety run trace",
+  "type": "object",
+  "required": [
+    "schema_version", "run_id", "condition_id", "scenario_id", "domain", "source_principal", "principals", "authority_chain",
+    "cohort", "ground_truth_facts", "permissibility_diff_path", "mechanism",
+    "mechanism_active", "intervention_coordinate", "transformation_diff_allowlist",
+    "transformation_delta", "defense", "safety_variant", "architecture", "backend",
+    "model_id", "backend_configuration", "provenance_key_id", "seed", "invocation_id", "steps", "final_environment_state", "terminal_status",
+    "status", "global_violation", "all_local_allow", "local_allow_global_harm",
+    "benign_completed", "defense_overblocked", "defense_blocked", "refusal",
+    "capability_failure", "total_token_usage", "total_latency_ms", "component_hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "run_id": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
+    "condition_id": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
+    "scenario_id": {"type": "string"},
+    "domain": {"type": "string"},
+    "source_principal": {"type": "string"},
+    "principals": {"type": "array", "minItems": 2, "items": {"type": "object"}},
+    "authority_chain": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "cohort": {"enum": ["mechanism_on", "mechanism_off", "single_agent_control", "omniscient_upper_bound"]},
+    "ground_truth_facts": {"type": "object"},
+    "permissibility_diff_path": {"type": "string"},
+    "mechanism": {"enum": ["intent_decomposition", "context_fragmentation", "authorization_drift", "policy_heterogeneity"]},
+    "mechanism_active": {"type": "boolean"},
+    "intervention_coordinate": {"type": "string"},
+    "transformation_diff_allowlist": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "transformation_delta": {"type": "array", "items": {"type": "string"}},
+    "defense": {"enum": ["local_only", "history_monitor", "source_anchoring", "provenance_carrying", "policy_intersection", "omniscient_reference"]},
+    "safety_variant": {"enum": ["unsafe", "safe"]},
+    "architecture": {"enum": ["multi_agent", "single_agent_full_context"]},
+    "backend": {"type": "string"},
+    "model_id": {"type": "string"},
+    "backend_configuration": {"type": "object"},
+    "provenance_key_id": {"type": "string", "minLength": 1},
+    "seed": {"type": "integer"},
+    "invocation_id": {"type": "string", "minLength": 1},
+    "steps": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"$ref": "#/$defs/step"}},
+    "final_environment_state": {"type": "object"},
+    "terminal_status": {"enum": ["required_benign_state", "forbidden_state", "incomplete"]},
+    "status": {"enum": ["completed", "model_refusal", "local_block", "defense_block", "capability_failure"]},
+    "global_violation": {"type": "boolean"},
+    "all_local_allow": {"type": "boolean"},
+    "local_allow_global_harm": {"type": "boolean"},
+    "benign_completed": {"type": "boolean"},
+    "defense_overblocked": {"type": "boolean"},
+    "defense_blocked": {"type": "boolean"},
+    "refusal": {"type": "boolean"},
+    "capability_failure": {"type": "boolean"},
+    "total_token_usage": {"$ref": "#/$defs/tokenUsage"},
+    "total_latency_ms": {"type": "number", "minimum": 0},
+    "component_hashes": {"type": "object"}
+  },
+  "$defs": {
+    "decision": {
+      "type": "object",
+      "required": ["value", "predicate_id", "reason", "evidence_keys"],
+      "properties": {
+        "value": {"enum": ["allow", "block"]},
+        "predicate_id": {"type": "string"},
+        "reason": {"type": "string"},
+        "evidence_keys": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "tokenUsage": {
+      "type": "object",
+      "required": ["input", "output"],
+      "properties": {"input": {"type": "integer", "minimum": 0}, "output": {"type": "integer", "minimum": 0}}
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "name", "terminal", "parameters"],
+      "properties": {
+        "role": {"enum": ["planner", "retriever", "transformer", "actuator"]},
+        "name": {"type": "string", "minLength": 1},
+        "terminal": {"type": "boolean"},
+        "parameters": {"type": "object"}
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "step_index", "agent_id", "role", "local_policy_id", "applicable_policy_ids",
+        "facts_visible", "objective_view", "restriction_visible", "delegation_message",
+        "artifact_input", "artifact_model_view", "artifact_output", "declared_action", "proposed_action", "local_decision",
+        "defense_decision", "defense_input", "tool_result", "shareable_public_evidence", "refusal",
+        "capability_failure", "token_usage", "latency_ms", "raw_model_output",
+        "proposal_status", "tool_status"
+      ],
+      "properties": {
+        "step_index": {"type": "integer", "minimum": 1, "maximum": 4},
+        "agent_id": {"type": "string"},
+        "role": {"enum": ["planner", "retriever", "transformer", "actuator"]},
+        "local_policy_id": {"type": "string"},
+        "applicable_policy_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "facts_visible": {"type": "object"},
+        "objective_view": {"type": "string"},
+        "restriction_visible": {"type": "boolean"},
+        "delegation_message": {"type": "string"},
+        "artifact_input": {"type": ["object", "null"]},
+        "artifact_model_view": {"type": ["object", "null"]},
+        "artifact_output": {"type": ["object", "null"]},
+        "declared_action": {"$ref": "#/$defs/action"},
+        "proposed_action": {"type": "object"},
+        "local_decision": {"$ref": "#/$defs/decision"},
+        "defense_decision": {"$ref": "#/$defs/decision"},
+        "defense_input": {"type": "object"},
+        "tool_result": {"type": ["object", "null"]},
+        "shareable_public_evidence": {"type": "object"},
+        "refusal": {"type": "boolean"},
+        "capability_failure": {"type": "boolean"},
+        "token_usage": {"$ref": "#/$defs/tokenUsage"},
+        "latency_ms": {"type": "number", "minimum": 0},
+        "raw_model_output": {"type": ["string", "null"]},
+        "proposal_status": {"enum": ["valid_proposal", "model_refusal", "schema_error"]},
+        "tool_status": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

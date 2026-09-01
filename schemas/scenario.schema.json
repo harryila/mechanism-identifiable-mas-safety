@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/mas-safety/scenario.schema.json",
+  "title": "Mechanism-identifiable workflow scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "title",
+    "domain",
+    "source_principal",
+    "principals",
+    "authority_chain",
+    "required_legitimate_work",
+    "full_objective",
+    "local_tasks",
+    "unsafe_facts",
+    "safe_fact_overrides",
+    "permissibility_fact",
+    "permissibility_diff_path",
+    "derived_fact_rules",
+    "global_invariant",
+    "actions",
+    "policies",
+    "context_fragments",
+    "source_restriction",
+    "provenance_claim_keys",
+    "public_evidence_by_role"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+    "title": {"type": "string", "minLength": 1},
+    "domain": {"type": "string", "minLength": 1},
+    "source_principal": {"type": "string", "minLength": 1},
+    "principals": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/principal"}
+    },
+    "authority_chain": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/authorityEdge"}
+    },
+    "required_legitimate_work": {"type": "string", "minLength": 1},
+    "full_objective": {"type": "string", "minLength": 1},
+    "local_tasks": {"$ref": "#/$defs/roleStringMap"},
+    "unsafe_facts": {"type": "object", "minProperties": 2},
+    "safe_fact_overrides": {"type": "object", "minProperties": 1, "maxProperties": 1},
+    "permissibility_fact": {"type": "string", "minLength": 1},
+    "permissibility_diff_path": {"type": "string", "pattern": "^/world/"},
+    "derived_fact_rules": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^\\$[a-zA-Z0-9_.-]+$"}
+    },
+    "global_invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate",
+        "terminal_action",
+        "trigger_fact",
+        "authorization_fact",
+        "always_required_facts",
+        "forbidden_state_key"
+      ],
+      "properties": {
+        "predicate": {"const": "terminal_requires_authorization"},
+        "terminal_action": {"type": "string"},
+        "trigger_fact": {"type": "string"},
+        "authorization_fact": {"type": "string"},
+        "always_required_facts": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "forbidden_state_key": {"type": "string"}
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {"$ref": "#/$defs/plannerAction"},
+        {"$ref": "#/$defs/retrieverAction"},
+        {"$ref": "#/$defs/transformerAction"},
+        {"$ref": "#/$defs/actuatorAction"}
+      ]
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent", "context", "restriction", "source", "downstream", "single_agent"],
+      "properties": {
+        "intent": {"$ref": "#/$defs/policy"},
+        "context": {"$ref": "#/$defs/policy"},
+        "restriction": {"$ref": "#/$defs/policy"},
+        "source": {"$ref": "#/$defs/policy"},
+        "downstream": {"$ref": "#/$defs/policy"},
+        "single_agent": {"$ref": "#/$defs/policy"}
+      }
+    },
+    "context_fragments": {"$ref": "#/$defs/roleArrayMap"},
+    "source_restriction": {"type": "string", "minLength": 1},
+    "provenance_claim_keys": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+    "public_evidence_by_role": {"$ref": "#/$defs/roleObjectMap"}
+  },
+  "$defs": {
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_id", "role", "authority"],
+      "properties": {
+        "principal_id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "authority": {"type": "string", "minLength": 1}
+      }
+    },
+    "authorityEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_principal", "to_principal", "authority", "required_fact"],
+      "properties": {
+        "from_principal": {"type": "string", "minLength": 1},
+        "to_principal": {"type": "string", "minLength": 1},
+        "authority": {"type": "string", "minLength": 1},
+        "required_fact": {"type": "string", "minLength": 1}
+      }
+    },
+    "roles": {"enum": ["planner", "retriever", "transformer", "actuator"]},
+    "roleStringMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planner", "retriever", "transformer", "actuator"],
+      "properties": {
+        "planner": {"type": "string"},
+        "retriever": {"type": "string"},
+        "transformer": {"type": "string"},
+        "actuator": {"type": "string"}
+      }
+    },
+    "roleArrayMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planner", "retriever", "transformer", "actuator"],
+      "properties": {
+        "planner": {"type": "array", "items": {"type": "string"}},
+        "retriever": {"type": "array", "items": {"type": "string"}},
+        "transformer": {"type": "array", "items": {"type": "string"}},
+        "actuator": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "roleObjectMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planner", "retriever", "transformer", "actuator"],
+      "properties": {
+        "planner": {"type": "object"},
+        "retriever": {"type": "object"},
+        "transformer": {"type": "object"},
+        "actuator": {"type": "object"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "name", "terminal", "parameters"],
+      "properties": {
+        "role": {"$ref": "#/$defs/roles"},
+        "name": {"type": "string", "minLength": 1},
+        "terminal": {"type": "boolean"},
+        "parameters": {"type": "object"}
+      }
+    },
+    "plannerAction": {"allOf": [{"$ref": "#/$defs/action"}, {"properties": {"role": {"const": "planner"}, "terminal": {"const": false}}}]},
+    "retrieverAction": {"allOf": [{"$ref": "#/$defs/action"}, {"properties": {"role": {"const": "retriever"}, "terminal": {"const": false}}}]},
+    "transformerAction": {"allOf": [{"$ref": "#/$defs/action"}, {"properties": {"role": {"const": "transformer"}, "terminal": {"const": false}}}]},
+    "actuatorAction": {"allOf": [{"$ref": "#/$defs/action"}, {"properties": {"role": {"const": "actuator"}, "terminal": {"const": true}}}]},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "predicate", "parameters"],
+      "properties": {
+        "policy_id": {"type": "string", "minLength": 1},
+        "predicate": {"enum": ["objective_authorization_guard", "visible_invariant_guard", "restriction_guard", "global_invariant_guard", "allow_if_all"]},
+        "parameters": {"type": "object"}
+      }
+    }
+  }
+}

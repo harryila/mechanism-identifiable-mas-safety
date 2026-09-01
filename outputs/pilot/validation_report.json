@@ -1,0 +1,43 @@
+{
+  "blocking_issue_count": 0,
+  "checks": {
+    "all_local_allow_recomputes": true,
+    "component_hashes_recompute": true,
+    "cross_defense_role_inputs_match": true,
+    "defense_inputs_respect_observability_contract": true,
+    "forbidden_terminal_state_consistent": true,
+    "headline_metrics_recompute": true,
+    "lgh_definition_consistent": true,
+    "mechanism_deltas_are_declared": true,
+    "mechanism_effect_grid_complete": true,
+    "metric_grid_complete": true,
+    "metric_rates_in_bounds": true,
+    "model_artifacts_exclude_defense_sidecars": true,
+    "paired_design_cell_count": true,
+    "paired_mechanism_effects_recompute": true,
+    "refusals_and_schema_errors_never_execute": true,
+    "run_ids_unique": true,
+    "safe_unsafe_authoritative_diff_is_single_field": true,
+    "scripted_pilot_scope": true,
+    "steps_have_required_fields": true,
+    "terminal_status_consistent": true,
+    "trace_and_csv_run_ids_match": true,
+    "trace_objects_have_required_fields": true,
+    "valid_proposals_match_declared_actions": true
+  },
+  "issues": [
+    {
+      "description": "All runs use the scripted oracle. The outputs validate experiment plumbing, not model behavior.",
+      "severity": "Medium"
+    }
+  ],
+  "overall_assessment": "Share with caveats",
+  "ready_for_empirical_claims": false,
+  "ready_for_live_model_pilot": true,
+  "required_caveats": [
+    "The scripted backend is an executable specification, not a sampled model.",
+    "Two workflows are insufficient for the planned eight-workflow clustered analysis.",
+    "Defense effects in this pilot are predeclared oracle behavior and must not be described as discovered findings."
+  ],
+  "scope": "deterministic pilot harness validation"
+}
