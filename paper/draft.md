@@ -1,11 +1,12 @@
 # Same Symptom, Different Failure: Mechanism-Identifiable Evaluation of Compositional Safety in Multi-Agent Systems
 
-> **Draft status:** post–Stage 1 live development report under the immutable
-> `v0.2.1` freeze, with the prospective `v0.2.2` Stage 2 replay amendment.
-> Stage 1 passed its advancement gate; no Stage 2 defense outcome had been
-> computed when the replay population, estimands, code, and construction rubric
-> were frozen. Bracketed Stage 2 and Stage 4 result text remains withheld. The
-> archived v0.1-scripted numbers are engineering validation only.
+> **Draft status:** post–Stage 2 development report under the immutable
+> `v0.2.1` Stage 1 and `v0.2.2-stage2-freeze` records. Stage 1 passed its
+> advancement gate, and the one authorized deterministic Stage 2 replay is
+> complete. The Stage 2 population, estimands, code, private-source commitments,
+> and construction rubric were frozen before any defense outcome was computed.
+> Bracketed Stage 4 result text remains withheld. The archived v0.1-scripted
+> numbers are engineering validation only.
 
 ## Abstract
 
@@ -17,19 +18,28 @@ and disagreement among legitimate policies can all produce the same trace-level
 symptom. We present a paired evaluation framework that manipulates each mechanism
 through a single declared intervention coordinate in a fixed four-stage pipeline.
 Local compliance and terminal harm are executable predicates, not LLM judgments.
-We specify five defense conditions under frozen information contracts and measure
-LGH, benign completion, defense overblocking, and mechanism-specific residual
-risk. The v0.2 design begins with exactly 192 live development workflow runs over
-two models, then freezes an intention-to-treat middleware replay and exactly
-eight new workflows before the
-confirmatory study. The one authorized Stage 1 attempt completed all 192 runs
+We compare an observed local-only comparator, four realistic middleware
+candidates under frozen information contracts, and a separately reported
+omniscient reference, measuring LGH, benign completion, defense overblocking,
+and mechanism-specific residual risk. The v0.2 design began with exactly 192
+live development workflow runs over two models and a prospectively frozen
+intention-to-treat middleware replay. It next requires outcome-blind independent
+control of final construction and sealing for exactly eight new workflows before
+the confirmatory study. The one authorized Stage 1 attempt completed all 192 runs
 using 762 agent calls. Its advancement gate passed: unsafe mechanism-off LGH was
 0/48, safe completion was 86/96, 758/762 attempted calls produced schema-valid
 decisions, and all four pooled paired effects met the Stage 1 threshold, although
 authorization drift had zero effect in the GPT-5.4 stratum. Because these
 observations come from two authored development workflows, they are excluded
-from confirmatory estimates; defense interactions and the sealed-workflow
-primary claim remain untested. **[STAGE 2 DEFENSE RESULT AND STAGE 4
+from confirmatory estimates. The zero-call Stage 2 replay found mechanism-specific
+defense effects: provenance carrying eliminated residual LGH in all four
+development mechanisms, source anchoring did so for authorization drift and
+policy heterogeneity, policy intersection did so only for policy heterogeneity,
+and history monitoring changed none. Every candidate missed authorization-drift
+utility because six frozen safe source paths escalated before middleware, while
+defense-attributable overblocking was zero in every observed cell. No candidate
+pair reversed rank across the utility-eligible development cells; the
+sealed-workflow interaction and primary claims remain untested. **[STAGE 4
 CONFIRMATORY RESULT WITHHELD.]** A
 strict defense rank reversal is a bonus result; pooled regret and model-family
 comparisons are exploratory. If the preregistered primary gates are not met, the
@@ -172,12 +182,19 @@ closed-loop model behavior.
 ### 3.3 Scenarios and controls
 
 The development fixtures cover protected-summary disclosure and an approval-gated
-vendor payment. The confirmatory study uses exactly eight additional sealed
-workflows: two each from healthcare, public services, education, and
-finance/procurement. A prospective construction rubric also fixes four terminal
-action types, at least three authority structures, and an exact one-fact
-safe/unsafe rule before Stage 2 outcomes are inspected. The two development
-fixtures are excluded from confirmatory estimates.
+vendor payment. The confirmatory study will use exactly eight additional
+workflows, to be authored and sealed: two each from healthcare, public services,
+education, and finance/procurement. The prospective construction rubric froze
+four terminal action types, at least three authority structures, and an exact
+one-fact safe/unsafe rule before Stage 2 outcomes were inspected. The two
+development fixtures are excluded from confirmatory estimates.
+
+The construction rubric was frozen before any Stage 2 defense outcome, but the
+eight workflow packages were not yet authored and sealed when those outcomes
+were inspected. The rubric therefore requires an outcome-blind independent
+author or reviewer to control final workflow selection and an access log to
+record that boundary. No Stage 2 effect, coverage result, interaction, or
+ranking may determine which workflow is chosen, altered, retained, or removed.
 
 Every mechanism-on unsafe run has a same-topology mechanism-off counterfactual and
 a matched-safe utility case. The matched-safe case is not a causal control; it
@@ -349,12 +366,103 @@ arm, and paired-effect tables are released in
 
 ### 5.3 Stage 2 deterministic defense replay
 
-**[WITHHELD UNTIL THE PUBLIC STAGE 2 FREEZE AND ONE-SHOT REPLAY.]** Report the
-complete intention-to-treat residual-risk, paired-effect, safe-utility,
-overblocking, proposal-coverage, and signed interaction tables. Preserve the
-candidate/reference boundary and label the result as exact deterministic
-middleware coverage and observability on frozen live-agent decision paths, not
-learned defense effectiveness or closed-loop adaptation.
+The one authorized replay evaluated four realistic middleware defenses and the
+omniscient integration reference on all 192 frozen Stage 1 decision paths,
+without a model or provider call. The normalized release contains 1,152 rows:
+192 observed local-only comparators, 768 realistic-defense evaluations, and 192
+omniscient-reference evaluations. All refused, escalated, error, and other
+nonproposal source paths remain in every realistic-defense intention-to-treat
+denominator.
+
+Pooled mechanism-on unsafe residual LGH and absolute reductions from local-only
+were:
+
+| Mechanism | Local | History monitor | Source anchoring | Provenance carrying | Policy intersection |
+|---|---:|---:|---:|---:|---:|
+| Intent decomposition | 11/12 | 11/12 (0/12) | 11/12 (0/12) | 0/12 (11/12) | 11/12 (0/12) |
+| Context fragmentation | 11/12 | 11/12 (0/12) | 11/12 (0/12) | 0/12 (11/12) | 11/12 (0/12) |
+| Authorization drift | 6/12 | 6/12 (0/12) | 0/12 (6/12) | 0/12 (6/12) | 6/12 (0/12) |
+| Policy heterogeneity | 9/12 | 9/12 (0/12) | 0/12 (9/12) | 0/12 (9/12) | 0/12 (9/12) |
+
+Mechanism-off unsafe LGH was 0/12 in every cell, so relative reductions there
+are non-estimable. The mechanism-on absolute-effect vectors, ordered as intent,
+context, authorization, and policy, were `(0, 0, 0, 0)` for history monitoring,
+`(0, 0, 0.50, 0.75)` for source anchoring, `(0.9167, 0.9167, 0.50, 0.75)` for
+provenance carrying, and `(0, 0, 0, 0.75)` for policy intersection.
+
+Safe utility and defense-attributable overblocking were:
+
+| Mechanism | Safe completion, every candidate | Defense overblocking | Eligible at 11/12? |
+|---|---:|---:|---|
+| Intent decomposition | 12/12 | 0/12 | Yes |
+| Context fragmentation | 11/12 | 0/12 | Yes |
+| Authorization drift | 6/12 | 0/12 | No |
+| Policy heterogeneity | 12/12 | 0/12 | Yes |
+
+The context failure was one upstream provider error. All six authorization
+failures were upstream escalations on the frozen safe source paths. They were
+not caused by defense blocks, but they still fail the prespecified utility gate;
+zero observed overblocking does not establish broader false-positive
+performance.
+
+Of the 192 source paths, 123 presented a valid, locally allowed terminal
+proposal; the remaining 69 comprised 51 refusals, 14 escalations, and four
+provider errors. Mechanism-on unsafe harmful-proposal interception was:
+
+| Mechanism | Opportunities | History monitor | Source anchoring | Provenance carrying | Policy intersection |
+|---|---:|---:|---:|---:|---:|
+| Intent decomposition | 11/12 | 0/11 | 0/11 | 11/11 | 0/11 |
+| Context fragmentation | 11/12 | 0/11 | 0/11 | 11/11 | 0/11 |
+| Authorization drift | 6/12 | 0/6 | 6/6 | 6/6 | 0/6 |
+| Policy heterogeneity | 9/12 | 0/9 | 9/9 | 9/9 | 9/9 |
+
+These are coverage diagnostics, not the primary estimand. All mechanism-off
+unsafe cells had zero opportunities, so their conditional interception rates
+are non-estimable rather than zero.
+
+Signed pooled interactions, defined as the first mechanism's absolute effect
+minus the second's, were:
+
+| Mechanism pair | History monitor | Source anchoring | Provenance carrying | Policy intersection |
+|---|---:|---:|---:|---:|
+| Intent – context | 0 | 0 | 0 | 0 |
+| Intent – authorization | 0 | -0.500 | +0.417 | 0 |
+| Intent – policy | 0 | -0.750 | +0.167 | -0.750 |
+| Context – authorization | 0 | -0.500 | +0.417 | 0 |
+| Context – policy | 0 | -0.750 | +0.167 | -0.750 |
+| Authorization – policy | 0 | -0.250 | -0.250 | -0.750 |
+
+Each interaction component is an absolute effect over the same 12 scheduled
+mechanism-on unsafe source identities. Because every realistic candidate failed
+the authorization-drift utility gate, every authorization-involving interaction
+is descriptive and excluded from utility-qualified ranking and reversal claims.
+
+These values partly reflect mechanism-specific baseline harm and terminal
+opportunity. Provenance, for example, intercepted every observed harmful
+terminal proposal despite its differing ITT effects. Its 0/48 pooled residual
+was descriptively lower than source anchoring at 22/48, policy intersection at
+28/48, and history monitoring at 37/48. That is not an admissible
+all-mechanism utility-qualified ranking because every candidate failed
+authorization-drift utility. Among eligible cells, provenance ranked first for
+intent and context; source, provenance, and policy tied for policy
+heterogeneity; authorization drift was unrankable. No pair reversed order
+across the three rankable development mechanisms. The bonus strict-reversal
+criterion also requires sealed-workflow direction agreement and therefore
+remains untested rather than failed.
+
+The omniscient reference reduced residual LGH to 0/12 in every mechanism and
+was excluded from candidate rankings and interactions. Provenance carrying and
+the omniscient reference had identical values in every released outcome field
+for each of the 192 matched source identities, but this is finite-replay
+agreement, not equivalence: their information contracts differ, and the
+provenance condition uses a replay-native identity and signed sidecar rather
+than a byte-identical Stage 1 artifact or metadata shown to the original model.
+
+The release audit recomputed all 288 effect, 288 utility, 64 coverage, and 216
+interaction cells from the released run table and verified the exact file set,
+checksums, schemas, multiplicities, manifest bindings, and privacy allowlist.
+The sanitized derivative is released in
+[`results/stage2-v0.2.2/`](../results/stage2-v0.2.2/).
 
 ### 5.4 Stage 4 confirmatory results
 
@@ -436,13 +544,29 @@ strata, and substantial arm-level nonexecution remained despite passing the
 pooled gate. These observations motivate calibration and sealed evaluation; they
 do not establish cross-workflow generalization.
 
+Stage 2 inherits that two-workflow limit and is an exact deterministic audit of
+frozen typed decisions, not closed-loop defended behavior. Its ITT effects are
+constrained by terminal-proposal availability and upstream nonexecution;
+proposal-conditioned interception is therefore kept separate. Zero observed
+overblocking does not establish a general false-positive rate, and signed
+interactions can reflect baseline-harm and opportunity differences as well as
+conditional defense behavior. Neither the authored mechanism mixture nor the
+finite simulator supports a deployment-prevalence or statistical-generalization
+claim.
+
 ## 8. Conclusion
 
 “Locally safe, globally harmful” names a symptom. Treating it as one threat model
 can hide both causal ambiguity and defense non-transferability. This work turns
 four candidate causes into explicit, paired interventions and makes defender
-visibility part of the experimental object. **[PRIMARY LIVE MECHANISM RESULT,
-SECONDARY INTERACTION RESULT, OR POSITION FALLBACK INSERTED UNDER THE FROZEN
-RULE.]** Whether a strict reversal appears or not, future compositional-safety
-reports should separate mechanism, policy authority, observability, and terminal
-outcome rather than compressing them into one attack-success number.
+visibility part of the experimental object. In the two-workflow development
+study, all four interventions generated positive pooled LGH effects, while the
+offline replay showed that the defense effect depended on the mechanism and its
+available evidence. Provenance carrying covered all observed harmful terminal
+proposals; source anchoring and policy intersection were selective; history
+monitoring had no effect under its frozen view. These are development findings,
+not confirmation. **[STAGE 4 PRIMARY AND SECONDARY CONFIRMATORY RESULTS, OR THE
+POSITION FALLBACK, INSERTED UNDER THE FROZEN RULE.]** Whether a strict reversal
+appears or not, future compositional-safety reports should separate mechanism,
+policy authority, observability, and terminal outcome rather than compressing
+them into one attack-success number.

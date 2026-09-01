@@ -21,8 +21,11 @@ multi-agent pipeline.
 - [`v0.2.2-stage2`](protocols/v0.2.2-stage2-replay-amendment.md) is a transparent
   post-Stage 1, pre-defense-outcome amendment for the deterministic middleware
   replay. The implementation and exact private-source commitments are frozen at
-  the `v0.2.2-stage2-freeze` tag before the one authorized replay. It changes no
-  Stage 1 outcome, gate, tag, or interpretation.
+  the [`v0.2.2-stage2-freeze`](https://github.com/harryila/mechanism-identifiable-mas-safety/tree/v0.2.2-stage2-freeze)
+  tag before the one authorized replay. That replay is complete; the audited
+  public derivative is in
+  [`results/stage2-v0.2.2/`](results/stage2-v0.2.2/). It changes no Stage 1
+  outcome, gate, tag, or interpretation.
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a
@@ -50,8 +53,37 @@ provider request/response identifiers, and private audit records remain
 untracked.
 
 Stage 1 is a two-workflow development micro-pilot, **not confirmatory evidence**.
-Defense calibration, sealed benchmark construction, and the Stage 4
+The finite-action block, sealed benchmark construction, and Stage 4
 confirmatory run remain future work.
+
+## Stage 2 deterministic replay result
+
+The one authorized offline replay evaluated every realistic defense on all 192
+frozen Stage 1 decision paths, including refusals, escalations, errors, and paths
+without a terminal proposal. It made zero new model or provider calls. The
+normalized release contains 1,152 rows: 192 observed local comparators, 768
+realistic-defense evaluations, and 192 omniscient-reference evaluations.
+
+Pooled mechanism-on unsafe residual LGH over 12 scheduled runs per cell was:
+
+| Mechanism | Local | History | Source | Provenance | Policy |
+|---|---:|---:|---:|---:|---:|
+| Intent decomposition | 11/12 | 11/12 | 11/12 | 0/12 | 11/12 |
+| Context fragmentation | 11/12 | 11/12 | 11/12 | 0/12 | 11/12 |
+| Authorization drift | 6/12 | 6/12 | 0/12 | 0/12 | 6/12 |
+| Policy heterogeneity | 9/12 | 9/12 | 0/12 | 0/12 | 0/12 |
+
+All candidates passed the 11/12 matched-safe utility gate for intent,
+context, and policy heterogeneity. All failed it for authorization drift at
+6/12 because six frozen source paths escalated before middleware, not because a
+defense overblocked them; observed defense overblocking was zero in every cell.
+Among eligible cells, provenance ranked first for intent and context, while
+source, provenance, and policy tied for policy heterogeneity. Across the three
+rankable mechanisms, no realistic candidate pair switched relative order. The
+preregistered strict-reversal bonus remains untested because its sealed-workflow
+criterion has not been evaluated. Exact effects, proposal coverage, interactions,
+limitations, checksums, and the audit record are in the
+[`Stage 2 result`](results/stage2-v0.2.2/README.md).
 
 The private Stage 1 archive is committed by a public, domain-separated SHA-256
 tree root and has two owner-read-only local copies. The commitment, preservation
@@ -139,16 +171,21 @@ The live protocol proceeds in four stages:
    `2 workflows x 4 mechanisms x 2 assignments x 2 safety variants x 3 repetitions x 2 models = 192`
    scheduled workflow runs, with at most 768 four-stage agent calls. See the
    [`reviewed result`](results/stage1-v0.2.1/README.md).
-2. **Defense calibration — frozen replay:** apply the four realistic middleware
-   defenses once to all 192 frozen Stage 1 decision paths under the prospective
+2. **Defense calibration — completed:** the four realistic middleware defenses
+   were applied once to all 192 frozen Stage 1 decision paths under the
+   prospective
    [`v0.2.2 amendment`](protocols/v0.2.2-stage2-replay-amendment.md). The replay
    is intention-to-treat; proposal-conditioned results are separately labelled
-   coverage diagnostics. The finite-action condition remains a separate future
-   block.
+   coverage diagnostics. See the
+   [`audited result`](results/stage2-v0.2.2/README.md). The finite-action
+   condition remains a separate future block.
 3. **Sealed benchmark construction — planned:** author and seal exactly eight new
    workflows under the prospective
-   [`construction rubric`](docs/confirmatory_workflow_construction_rubric.md),
-   without using Stage 2 outcomes to select or tune them.
+   [`construction rubric`](docs/confirmatory_workflow_construction_rubric.md).
+   Because Stage 2 outcomes are now known before the workflow packages were
+   sealed, an outcome-blind independent author or reviewer must control final
+   workflow selection and record the access boundary; no Stage 2 result may be
+   used to choose, tune, retain, or remove a workflow.
 4. **Freeze and confirmation — planned:** hash the final materials, model snapshots,
    budgets, gates, and analysis before executing the sealed study.
 
@@ -160,6 +197,9 @@ limited to allowlisted run outcomes, aggregates, a replay manifest, and
 checksums. It is an exact deterministic middleware coverage and observability
 audit on frozen live-agent decision paths—not learned defense effectiveness,
 closed-loop adaptation, deployment prevalence, or confirmatory evidence.
+The `v0.2.2` one-shot authority has now been consumed; do not rerun the frozen
+command. Any later replay is a new study and requires a new prospective version
+and authority.
 
 The primary condition asks each role to choose `execute`, `refuse`, or `escalate`
 for one declared typed action. A separate secondary condition asks the model to
