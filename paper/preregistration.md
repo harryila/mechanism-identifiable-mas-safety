@@ -1,9 +1,10 @@
-# Preregistration: v0.2-live mechanism-identifiable compositional safety
+# Preregistration: v0.2.1-live mechanism-identifiable compositional safety
 
 ## Status and version boundary
 
 This document summarizes the active
-[`v0.2-live`](../protocols/v0.2-live.md) protocol. It must be frozen before any
+[`v0.2.1-live`](../protocols/v0.2-live.md) protocol. This version freezes Stage 1
+before any provider call. A separate final freeze remains required before any
 live outcome is inspected on the sealed confirmatory workflows.
 
 The initial public release is archived exactly at the immutable
@@ -57,6 +58,38 @@ The Stage 1 identities are fixed to
 `healthcare.patient_summary_disclosure` and `finance.unapproved_payment`; their
 committed content hashes must match. One unique batch identifier binds all 192
 scheduled traces in a single attempt.
+
+The two equally weighted snapshots are, in frozen order,
+`gpt-5.5-2026-04-23` and `gpt-5.4-2026-03-05`. Both use
+`reasoning.effort=low`, `max_output_tokens=512`, and
+`service_tier="default"`. The explicit default fixes standard processing and
+pricing rather than inheriting an automatic or project-level tier. A
+provider-returned tier remains in the exact private raw response but is omitted
+from release/public trace metadata.
+
+Exactly one harmless structured-output smoke call is made to each snapshot
+before Stage 1. The prompt contains no study workflow or mechanism content, and
+the calls use the same reasoning and output-token settings. The two calls form a
+separate private smoke batch and are excluded from the 192 scheduled runs, every
+estimand and gate, and all claims about model behavior. There are no smoke retries
+or replacements. If either call fails, Stage 1 does not begin and repair requires
+a prospectively versioned protocol.
+
+Smoke and Stage 1 share a hard gross USD 20 spending ledger. No call may begin if
+it cannot remain within the authorized balance. Exhausting the ledger stops the
+run, preserves every attempted record, and makes the planned matrix incomplete;
+it does not authorize replacement calls or outcome-based exclusions.
+At the frozen standard-tier prices, an offline 770-call maximum-output sizing
+pass treats every canonical request UTF-8 byte as one input token and yields USD
+19.601437500. The runtime then durably reserves 65,536 input tokens plus 512
+output tokens before each call, settles valid usage at full uncached rates, and
+charges the full reservation when usage is unavailable. The private integer
+nano-USD ledger is append-only and hash-chained.
+Before the ledger and provider client are constructed, the runtime atomically
+consumes a private one-shot authority record for the exact frozen commit. A
+smoke failure, abort, or crash cannot be rerun under that commit; another paid
+attempt requires both a new prospective protocol commit and new operator
+authorization.
 
 ### Stage 2: defenses and finite actions
 
@@ -254,8 +287,9 @@ state, protocol version, commit, and component hashes.
 The live adapter pins `openai==3.6.0` and the official OpenAI API endpoint,
 disables redirects and ambient proxy/TLS environment settings, and
 refuses ambient `OPENAI_BASE_URL` or `OPENAI_CUSTOM_HEADERS` overrides. The Stage
-1 design audit requires the exact SDK, recorded endpoint, prompt/schema hashes,
-and both fail-closed settings.
+1 design audit requires the exact SDK, recorded endpoint and snapshots,
+`reasoning.effort=low`, `max_output_tokens=512`, `service_tier="default"`,
+prompt/schema hashes, and both fail-closed settings.
 
 Before provider-client construction, the production command runs the exact
 release-frozen hard-QA count and an execution sentinel in a sanitized subprocess.

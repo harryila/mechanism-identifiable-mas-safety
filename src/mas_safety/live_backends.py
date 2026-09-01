@@ -12,12 +12,20 @@ from pathlib import Path
 
 from .backends import AgentBackend
 from .enums import AgentDecisionKind, DecisionMode
+from .live_budget import (
+    BudgetAccountingError,
+    BudgetReservation,
+    LiveBudgetLedger,
+)
 from .models import ActionSpec, AgentDecision, Artifact, StageContext
 
-PROMPT_VERSION = "v0.2-live-execution-decision"
+PROMPT_VERSION = "v0.2.1-live-execution-decision"
 DECISION_SCHEMA_VERSION = "0.2.0"
 OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1"
 PINNED_OPENAI_SDK_VERSION = "3.6.0"
+FROZEN_REASONING_EFFORT = "low"
+FROZEN_MAX_OUTPUT_TOKENS = 512
+FROZEN_SERVICE_TIER = "default"
 
 _FORBIDDEN_OPENAI_TRANSPORT_ENV_VARS = (
     "OPENAI_BASE_URL",
@@ -137,6 +145,12 @@ class ProviderCallError(TracedBackendError):
     """Raised for a transport failure or a non-completed provider response."""
 
 
+class ProviderContractError(TracedBackendError):
+    """Raised when a response violates the frozen billing/model contract."""
+
+    abort_live_batch = True
+
+
 def _reject_ambient_openai_transport_overrides() -> None:
     present = [
         name for name in _FORBIDDEN_OPENAI_TRANSPORT_ENV_VARS if name in os.environ
@@ -166,16 +180,29 @@ class OpenAIResponsesBackend(AgentBackend):
         model_id: str,
         raw_log_dir: Path,
         client: object | None = None,
-        max_output_tokens: int = 256,
+        max_output_tokens: int = FROZEN_MAX_OUTPUT_TOKENS,
         timeout_seconds: float = 120.0,
         sdk_version: str | None = None,
+        budget_ledger: LiveBudgetLedger | None = None,
+        budget_phase: str = "stage_1_live_feasibility",
     ) -> None:
         if not model_id.strip():
             raise ValueError("model_id must be a non-empty explicit model identifier")
-        if max_output_tokens < 64:
-            raise ValueError("max_output_tokens must be at least 64")
+        if (
+            type(max_output_tokens) is not int
+            or max_output_tokens != FROZEN_MAX_OUTPUT_TOKENS
+        ):
+            raise ValueError(
+                "max_output_tokens is frozen at "
+                f"{FROZEN_MAX_OUTPUT_TOKENS} for the preregistered pilot"
+            )
         if not 1.0 <= timeout_seconds <= 600.0:
             raise ValueError("timeout_seconds must be between 1 and 600 seconds")
+        if budget_phase not in {
+            "pre_stage_1_smoke",
+            "stage_1_live_feasibility",
+        }:
+            raise ValueError("Unknown live-budget phase")
         if client is None:
             _reject_ambient_openai_transport_overrides()
 
@@ -227,6 +254,8 @@ class OpenAIResponsesBackend(AgentBackend):
         self._timeout_seconds = timeout_seconds
         self._call_count = 0
         self._sdk_version = sdk_version
+        self._budget_ledger = budget_ledger
+        self._budget_phase = budget_phase
         self._run_metadata: dict[str, object] = {}
         self.configuration: dict[str, object] = {
             "provider": "openai",
@@ -245,6 +274,8 @@ class OpenAIResponsesBackend(AgentBackend):
             "decision_schema_sha256": DECISION_SCHEMA_SHA256,
             "structured_output": "json_schema_strict",
             "store": False,
+            "service_tier": FROZEN_SERVICE_TIER,
+            "reasoning_effort": FROZEN_REASONING_EFFORT,
             "max_output_tokens": max_output_tokens,
             "timeout_seconds": timeout_seconds,
             "temperature": "provider_default_unset",
@@ -252,6 +283,8 @@ class OpenAIResponsesBackend(AgentBackend):
             "tools": "none",
             "max_retries": 0,
             "seed_supported": False,
+            "hard_budget_enforced": budget_ledger is not None,
+            "budget_phase": budget_phase,
         }
 
     def set_run_metadata(self, metadata: Mapping[str, object]) -> None:
@@ -276,46 +309,34 @@ class OpenAIResponsesBackend(AgentBackend):
         artifact: Artifact | None,
         seed: int,
     ) -> AgentDecision:
-        action_catalog = _action_catalog(offered_actions)
-        candidate_id = _find_action_id(candidate_action, action_catalog)
-        if candidate_id is None:
-            raise ValueError("candidate_action must be present in offered_actions")
-
-        prompt_payload = _visible_prompt_payload(
+        provider_request, prompt = build_frozen_provider_request(
+            model_id=self.model_id,
             context=context,
             decision_mode=decision_mode,
-            candidate_action_id=candidate_id,
-            action_catalog=action_catalog,
+            candidate_action=candidate_action,
+            offered_actions=offered_actions,
             artifact=artifact,
+            timeout_seconds=self._timeout_seconds,
         )
-        prompt = json.dumps(prompt_payload, indent=2, sort_keys=True)
-        provider_request: dict[str, object] = {
-            "model": self.model_id,
-            "instructions": _INSTRUCTIONS,
-            "input": prompt,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "agent_execution_decision",
-                    "description": (
-                        "A typed decision over the runtime's offered action set."
-                    ),
-                    "schema": DECISION_JSON_SCHEMA,
-                    "strict": True,
-                }
-            },
-            "max_output_tokens": self._max_output_tokens,
-            "timeout": self._timeout_seconds,
-            "store": False,
-        }
+        action_catalog = _action_catalog(offered_actions)
         prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        canonical_request = json.dumps(
+            provider_request, sort_keys=True, separators=(",", ":")
+        )
         provider_request_sha256 = hashlib.sha256(
-            json.dumps(
-                provider_request, sort_keys=True, separators=(",", ":")
-            ).encode("utf-8")
+            canonical_request.encode("utf-8")
         ).hexdigest()
 
         call_stem = self._next_call_stem(provider_request)
+        reservation: BudgetReservation | None = None
+        if self._budget_ledger is not None:
+            reservation = self._budget_ledger.reserve(
+                phase=self._budget_phase,
+                model_id=self.model_id,
+                call_stem=call_stem,
+                request_sha256=provider_request_sha256,
+                request_utf8_bytes=len(canonical_request.encode("utf-8")),
+            )
         attempted_at_utc = _utc_now()
         request_record = {
             "record_version": DECISION_SCHEMA_VERSION,
@@ -325,10 +346,21 @@ class OpenAIResponsesBackend(AgentBackend):
             "prompt_sha256": prompt_sha256,
             "provider_request_sha256": provider_request_sha256,
             "run_metadata": dict(self._run_metadata),
+            "budget_reservation": (
+                asdict(reservation) if reservation is not None else None
+            ),
             "provider_request": provider_request,
         }
         request_path = self.raw_log_dir / f"{call_stem}.request.json"
-        request_record_sha256 = _write_private_json(request_path, request_record)
+        try:
+            request_record_sha256 = _write_private_json(request_path, request_record)
+        except BaseException:
+            if reservation is not None and self._budget_ledger is not None:
+                self._budget_ledger.cancel_before_provider_call(
+                    reservation,
+                    reason="private_request_record_write_failed_before_network_io",
+                )
+            raise
 
         started = time.perf_counter()
         try:
@@ -341,6 +373,12 @@ class OpenAIResponsesBackend(AgentBackend):
             recorded_at_utc = _utc_now()
             request_id = _transport_request_id(exc, {})
             provider_error_response = _provider_error_response(exc)
+            budget_event = None
+            if reservation is not None and self._budget_ledger is not None:
+                budget_event = self._budget_ledger.forfeit(
+                    reservation,
+                    reason="provider_exception_usage_unavailable",
+                )
             error_record = {
                 "record_version": DECISION_SCHEMA_VERSION,
                 "recorded_at_utc": recorded_at_utc,
@@ -348,6 +386,7 @@ class OpenAIResponsesBackend(AgentBackend):
                 "transport_request_id": request_id,
                 "provider_error_response": provider_error_response,
                 "latency_ms": latency_ms,
+                "budget_event": budget_event,
             }
             result_record_sha256 = _write_private_json(
                 self.raw_log_dir / f"{call_stem}.error.json", error_record
@@ -383,31 +422,57 @@ class OpenAIResponsesBackend(AgentBackend):
         received_at_utc = _utc_now()
         request_id = _transport_request_id(response, raw_response)
         response_path = self.raw_log_dir / f"{call_stem}.response.json"
+        usage = _token_usage_or_none(response, raw_response)
+        budget_event: dict[str, object] | None = None
+        budget_error: BudgetAccountingError | None = None
+        if reservation is not None and self._budget_ledger is not None:
+            if usage is None:
+                budget_event = self._budget_ledger.forfeit(
+                    reservation,
+                    reason="provider_response_missing_valid_usage",
+                )
+                budget_error = BudgetAccountingError(
+                    "Provider response omitted valid usage accounting"
+                )
+            else:
+                try:
+                    budget_event = self._budget_ledger.settle(
+                        reservation,
+                        input_tokens=usage[0],
+                        output_tokens=usage[1],
+                    )
+                except BudgetAccountingError as exc:
+                    budget_error = exc
         response_record = {
             "record_version": DECISION_SCHEMA_VERSION,
             "received_at_utc": received_at_utc,
             "transport_request_id": request_id,
             "latency_ms": latency_ms,
+            "budget_event": budget_event,
             "provider_response": raw_response,
         }
         result_record_sha256 = _write_private_json(response_path, response_record)
 
-        input_tokens, output_tokens = _token_usage(response, raw_response)
+        if budget_error is not None:
+            raise budget_error
+        input_tokens, output_tokens = usage or _token_usage(response, raw_response)
         response_status = _field(response, raw_response, "status")
+        resolved_model = _field(response, raw_response, "model")
+        response_service_tier = _field(response, raw_response, "service_tier")
         metadata: dict[str, object] = {
             "provider": "openai",
             "api": "responses",
             "response_id": _field(response, raw_response, "id"),
             "request_id": request_id,
             "requested_model": self.model_id,
-            "resolved_response_model": _field(response, raw_response, "model"),
-            "model_snapshot": _field(response, raw_response, "model"),
+            "resolved_response_model": resolved_model,
+            "model_snapshot": resolved_model,
             "created_at": _field(response, raw_response, "created_at"),
             "status": response_status,
             "system_fingerprint": _field(
                 response, raw_response, "system_fingerprint"
             ),
-            "service_tier": _field(response, raw_response, "service_tier"),
+            "service_tier": response_service_tier,
             "sdk_version": self._sdk_version,
             "prompt_version": PROMPT_VERSION,
             "decision_schema_version": DECISION_SCHEMA_VERSION,
@@ -447,6 +512,18 @@ class OpenAIResponsesBackend(AgentBackend):
                 }
             },
         }
+
+        if self._budget_ledger is not None and (
+            resolved_model != self.model_id
+            or response_service_tier != FROZEN_SERVICE_TIER
+        ):
+            raise ProviderContractError(
+                "Provider response violated the frozen model or service-tier contract",
+                provider_metadata={**metadata, "failure_type": "provider_contract"},
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+            )
 
         output_text = _output_text(response, raw_response)
         if response_status != "completed":
@@ -576,6 +653,56 @@ class OpenAIResponsesBackend(AgentBackend):
                 }
             },
         }
+
+
+def build_frozen_provider_request(
+    *,
+    model_id: str,
+    context: StageContext,
+    decision_mode: DecisionMode,
+    candidate_action: ActionSpec,
+    offered_actions: tuple[ActionSpec, ...],
+    artifact: Artifact | None,
+    timeout_seconds: float = 120.0,
+) -> tuple[dict[str, object], str]:
+    """Render the exact frozen request without constructing a provider client."""
+
+    action_catalog = _action_catalog(offered_actions)
+    candidate_id = _find_action_id(candidate_action, action_catalog)
+    if candidate_id is None:
+        raise ValueError("candidate_action must be present in offered_actions")
+    prompt_payload = _visible_prompt_payload(
+        context=context,
+        decision_mode=decision_mode,
+        candidate_action_id=candidate_id,
+        action_catalog=action_catalog,
+        artifact=artifact,
+    )
+    prompt = json.dumps(prompt_payload, indent=2, sort_keys=True)
+    return (
+        {
+            "model": model_id,
+            "instructions": _INSTRUCTIONS,
+            "input": prompt,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "agent_execution_decision",
+                    "description": (
+                        "A typed decision over the runtime's offered action set."
+                    ),
+                    "schema": DECISION_JSON_SCHEMA,
+                    "strict": True,
+                }
+            },
+            "service_tier": FROZEN_SERVICE_TIER,
+            "reasoning": {"effort": FROZEN_REASONING_EFFORT},
+            "max_output_tokens": FROZEN_MAX_OUTPUT_TOKENS,
+            "timeout": timeout_seconds,
+            "store": False,
+        },
+        prompt,
+    )
 
 
 def _action_catalog(
@@ -829,6 +956,30 @@ def _token_usage(response: object, raw_response: object) -> tuple[int, int]:
     return _nonnegative_int(getattr(usage, "input_tokens", 0)), _nonnegative_int(
         getattr(usage, "output_tokens", 0)
     )
+
+
+def _token_usage_or_none(
+    response: object, raw_response: object
+) -> tuple[int, int] | None:
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(raw_response, dict):
+        usage = raw_response.get("usage")
+    if isinstance(usage, dict):
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+    elif usage is not None:
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+    else:
+        return None
+    if (
+        type(input_tokens) is not int
+        or input_tokens < 0
+        or type(output_tokens) is not int
+        or output_tokens < 0
+    ):
+        return None
+    return input_tokens, output_tokens
 
 
 def _nonnegative_int(value: object) -> int:

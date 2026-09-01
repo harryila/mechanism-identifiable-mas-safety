@@ -11,8 +11,9 @@ multi-agent pipeline.
   [`v0.1.0-scripted` tag](https://github.com/harryila/mechanism-identifiable-mas-safety/tree/v0.1.0-scripted).
   It is a deterministic executable specification and test oracle, **not empirical
   model evidence**.
-- [`v0.2-live`](protocols/v0.2-live.md) is the active prospective research
-  protocol. No live provider outcomes have been collected under it.
+- [`v0.2.1-live`](protocols/v0.2-live.md) is the active prospective research
+  protocol and pre-live Stage 1 freeze. No live provider outcomes have been
+  collected under it.
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a
@@ -91,7 +92,7 @@ The executed analysis companion is
 with `uv run --frozen --extra notebook python scripts/build_notebook.py
 --execute` after regenerating outputs.
 
-## Active v0.2 live study
+## Active v0.2.1 live study
 
 The live protocol proceeds in four stages:
 
@@ -141,37 +142,61 @@ The v0.2 execution-decision and finite-action interface must pass its frozen
 offline and provider-adapter tests before the first protocol call. The existence
 of an adapter is not evidence that a live stage has been run.
 
-Install the exact `openai==3.6.0` live adapter and hard-QA dependencies, then run the frozen
-Stage 1 matrix with two
-explicit snapshot IDs:
+Install the exact `openai==3.6.0` live adapter and hard-QA dependencies, then run
+the frozen Stage 1 matrix with the two exact snapshot IDs:
 
 ```bash
 uv sync --frozen --extra dev --extra live-openai
 export MAS_SAFETY_PROVENANCE_KEY_B64=$(openssl rand -base64 32)
 uv run --frozen --extra dev --extra live-openai python -m mas_safety run-live-development \
-  --model MODEL_SNAPSHOT_A \
-  --model MODEL_SNAPSHOT_B \
+  --model gpt-5.5-2026-04-23 \
+  --model gpt-5.4-2026-03-05 \
   --output outputs/private/live-development-YYYYMMDD
 ```
 
 Set `OPENAI_API_KEY` through the process environment or a secret manager before
-running the command; never place it in a command argument, fixture, or tracked
-file. Replace both `MODEL_SNAPSHOT_*` placeholders with the two IDs frozen for
-the development run; each ID must contain its `YYYY-MM-DD` snapshot date. Before
-constructing a provider client, the command requires a clean Git worktree and
-automatically runs the frozen hard-QA suite in a sanitized subprocess with
-ambient pytest controls and third-party plugin autoload disabled. It verifies the
-release-frozen test count and an executed sentinel, records the commit/protocol/component
-and exact scenario hashes, and binds every run to a unique batch ID. It refuses
-to reuse even an empty existing batch path
-and writes the full provider request/response records with private file permissions.
+running the command; never place it in a command argument, fixture, tracked file,
+or chat message. The v0.2.1 request configuration is frozen to
+`reasoning.effort=low`, `max_output_tokens=512`, and
+`service_tier="default"` for both models. The explicit default tier fixes the
+request to standard processing and pricing rather than inheriting an automatic
+or project-level tier.
+
+The command automatically makes exactly two harmless structured-output smoke
+calls before Stage 1: one per frozen snapshot, using the same request settings.
+They contain no study workflow, are logged in a separate private smoke batch,
+and are excluded from the 192 scheduled runs, all estimands, and every
+advancement gate. If either call fails, the command starts zero Stage 1 calls.
+The smoke calls and Stage 1 share one hard USD 20 hash-chained spending ledger.
+Before any provider client is constructed, an offline worst-case sizing pass
+prices all 770 possible calls at USD 19.601437500 by treating every canonical
+request byte as an input token and every response as using all 512 output
+tokens. A durable conservative reservation is then required before each actual
+call. The command also atomically consumes a private, commit-scoped one-shot
+provider authority before constructing a client. A failed smoke, abort, or crash
+cannot be rerun under the same frozen commit; any later attempt requires a new
+prospective protocol commit and new operator authorization. There is no
+authorization to exceed the ceiling, retry, or make a replacement call.
+
+Before constructing a provider client, the Stage 1 command requires a clean Git
+worktree and automatically runs the frozen hard-QA suite in a sanitized subprocess
+with ambient pytest controls and third-party plugin autoload disabled. It verifies
+the release-frozen test count and an executed sentinel, records the
+commit/protocol/component and exact scenario hashes, and binds every run to a
+unique batch ID. It refuses to reuse even an empty existing batch path and writes
+the full provider request/response records with private file permissions.
 The adapter pins `openai==3.6.0` and `https://api.openai.com/v1`, disables HTTP
 redirects and ambient proxy/TLS environment settings, and fails closed if
 `OPENAI_BASE_URL` or `OPENAI_CUSTOM_HEADERS` is present in the environment; unset
 either variable before the run rather than weakening that transport check.
 It rechecks the freeze after hard QA, again after model execution, and immediately
 before recording completion. At completion it audits every trace-to-raw-log link,
-exact request/result-record hash, run-metadata binding, and persisted trace hash.
+exact request/result-record hash, run-metadata binding, persisted trace hash,
+raw-usage/trace/ledger agreement, and both directions of provider-attempt
+completeness for Stage 1 and smoke.
+An exact private raw response retains the provider payload, including a
+provider-returned `service_tier` field if present, but that field is not copied
+into release/public trace metadata.
 Its final artifacts include the call manifest, 192-run
 trace, arm table, workflow/repetition paired
 mechanism effects, and JSON/Markdown micro-pilot report.

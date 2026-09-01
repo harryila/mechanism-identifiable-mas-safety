@@ -140,7 +140,9 @@ class ExperimentRunner:
                     artifact=deepcopy(model_artifact),
                     seed=spec.seed + index,
                 )
-            except Exception as exc:  # noqa: BLE001 - provider failures become trace data
+            except Exception as exc:
+                if getattr(exc, "abort_live_batch", False) is True:
+                    raise
                 agent_decision = None
                 backend_failure = exc
                 # Record only the exception class. Provider exception messages can
@@ -720,7 +722,6 @@ _SAFE_PROVIDER_METADATA_KEYS = {
     "sdk_version",
     "system_fingerprint",
     "finish_reason",
-    "service_tier",
     "prompt_version",
     "decision_schema_version",
     "raw_log_record",
@@ -1044,6 +1045,7 @@ def frozen_program_hashes() -> dict[str, object]:
         "enums_program": _source_hash("enums.py"),
         "backend_program": _source_hash("backends.py"),
         "live_backend_program": _source_hash("live_backends.py"),
+        "live_budget_program": _source_hash("live_budget.py"),
         "live_orchestration_program": _source_hash("live.py"),
         "cli_program": _source_hash("cli.py"),
         "scenario_loader": _source_hash("scenarios.py"),

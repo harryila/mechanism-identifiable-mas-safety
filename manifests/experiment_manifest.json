@@ -1,6 +1,6 @@
 {
-  "schema_version": "0.2.0",
-  "protocol_version": "v0.2-live",
+  "schema_version": "0.2.1",
+  "protocol_version": "v0.2.1-live",
   "study_title": "Same Symptom, Different Failure: Mechanism-Identifiable Evaluation of Compositional Safety in Multi-Agent Systems",
   "status": "prospective_no_live_provider_outcomes",
   "archive": {
@@ -10,7 +10,7 @@
     "protocol": "protocols/v0.1-scripted.md",
     "reproduction_source": "repository tag v0.1.0-scripted"
   },
-  "claim_boundary": "The immutable v0.1.0-scripted tag is the exact v0.1 archive. Current checked-in scripted outputs are v0.2 compatibility/preflight artifacts only. Neither is empirical model evidence; confirmatory claims require the frozen v0.2-live Stage 4 study on sealed workflows.",
+  "claim_boundary": "The immutable v0.1.0-scripted tag is the exact v0.1 archive. Current checked-in scripted outputs are v0.2 compatibility/preflight artifacts only. Neither is empirical model evidence; confirmatory claims require the frozen v0.2.1-live Stage 4 study on sealed workflows.",
   "claim_hierarchy": {
     "primary": "At least two causally distinct preregistered interventions yield the same local-allow/global-harm outcome signature in live agents.",
     "secondary": "Absolute defense effect differs by generating mechanism under frozen defense implementations and information contracts.",
@@ -24,6 +24,35 @@
   },
   "pipeline": ["planner", "retriever", "transformer", "actuator"],
   "tools": "simulated_only",
+  "provider_spending_authorization": {
+    "currency": "USD",
+    "hard_gross_ceiling": 20.0,
+    "covers": ["pre_stage_1_smoke", "stage_1_live_feasibility"],
+    "standard_tier_prices_usd_per_million_tokens": {
+      "gpt-5.5-2026-04-23": {"input": 5.0, "output": 30.0},
+      "gpt-5.4-2026-03-05": {"input": 2.5, "output": 15.0}
+    },
+    "offline_full_matrix_preflight": {
+      "calls": 770,
+      "method": "price each canonical request UTF-8 byte as one full-rate input token and assign all 512 output tokens to every call",
+      "frozen_result_usd": 19.6014375,
+      "must_fit_before_provider_client": true
+    },
+    "per_call_durable_reservation": {
+      "input_tokens": 65536,
+      "output_tokens": 512,
+      "maximum_canonical_request_utf8_bytes": 32768,
+      "successful_response": "settle from provider usage at full uncached standard-tier rates and release excess",
+      "missing_or_malformed_usage_or_transport_failure": "charge the full reservation",
+      "crash_semantics": "leave the durable reservation held"
+    },
+    "ledger": "private append-only hash-chained integer nano-USD events shared by smoke and Stage 1",
+    "one_paid_invocation_per_protocol_commit": true,
+    "authority_lock": "atomically create outputs/private/authorities/<commit>.authority.json before ledger or provider-client construction; a smoke failure, abort, or crash does not restore authority",
+    "rerun_requires": ["new prospective protocol commit", "new operator authorization"],
+    "start_call_when_remaining_authorization_is_insufficient": false,
+    "on_ceiling": "stop without retry or replacement, preserve attempted records, and report the Stage 1 matrix incomplete"
+  },
   "development_workflows": [
     "healthcare.patient_summary_disclosure",
     "finance.unapproved_payment"
@@ -94,6 +123,31 @@
     "policy_semantics": "Application-policy allow means not prohibited given the trusted role observation; it is not an instruction, provider-safety judgment, or proof of global authorization."
   },
   "stages": {
+    "pre_stage_1_smoke": {
+      "study_status": "out_of_study_provider_capability_check",
+      "call_count": 2,
+      "calls_per_model": 1,
+      "model_snapshots": [
+        "gpt-5.5-2026-04-23",
+        "gpt-5.4-2026-03-05"
+      ],
+      "request_parameters": {
+        "reasoning": {
+          "effort": "low"
+        },
+        "max_output_tokens": 512,
+        "service_tier": "default"
+      },
+      "uses_study_workflow_or_mechanism_content": false,
+      "structured_output_required": true,
+      "automatic_retries": 0,
+      "replacement_calls": 0,
+      "included_in_scheduled_stage_1_runs": false,
+      "included_in_estimands_or_gates": false,
+      "included_in_model_behavior_claims": false,
+      "failure_rule": "do not begin Stage 1; any repair requires a new prospective protocol version",
+      "logging": "separately labelled private smoke batch"
+    },
     "stage_1_live_feasibility": {
       "workflow_ids": [
         "healthcare.patient_summary_disclosure",
@@ -105,12 +159,23 @@
       "safety_variant_count": 2,
       "repetitions": 3,
       "model_count": 2,
+      "model_snapshots": [
+        "gpt-5.5-2026-04-23",
+        "gpt-5.4-2026-03-05"
+      ],
+      "request_parameters": {
+        "reasoning": {
+          "effort": "low"
+        },
+        "max_output_tokens": 512,
+        "service_tier": "default"
+      },
       "scheduled_workflow_runs": 192,
       "max_roles_per_run": 4,
       "max_agent_calls": 768,
       "batch_identity": "one unique non-empty batch ID shared by all 192 traces",
       "hard_qa": {
-        "expected_test_count": 107,
+        "expected_test_count": 118,
         "execution_sentinel": "test_hard_qa_sentinel",
         "ambient_pytest_controls_inherited": false,
         "third_party_plugin_autoload": false,
@@ -234,6 +299,13 @@
         "OPENAI_CUSTOM_HEADERS"
       ]
     },
+    "service_tier_handling": {
+      "request_parameter_sent": true,
+      "request_parameter_value": "default",
+      "pricing_semantics": "standard processing and pricing; do not inherit automatic or project-level service tier selection",
+      "private_exact_raw_response_retains_provider_field_if_returned": true,
+      "release_or_public_trace_metadata_includes_field": false
+    },
     "before_parsing": [
       "exact rendered messages and role order",
       "tool and action schemas",
@@ -255,6 +327,8 @@
       "full SHA-256 of each exact response or error record",
       "full SHA-256 of the persisted JSONL trace",
       "trace-to-raw-record links and all run metadata",
+      "bidirectional raw-record and ledger-event completeness for every paid smoke and Stage 1 attempt",
+      "exact raw provider usage, ledger settlement, and trace usage agreement",
       "single batch ID, exact scenario objects, and frozen program hashes"
     ],
     "harness_storage_controls": [

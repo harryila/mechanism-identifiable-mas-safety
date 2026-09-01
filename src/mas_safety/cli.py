@@ -32,7 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     live_parser = subparsers.add_parser(
         "run-live-development",
-        help="Run the frozen 192-run, local-only v0.2 live micro-pilot.",
+        help=(
+            "Run the automatic two-call smoke and frozen 192-run, local-only "
+            "v0.2.1 live micro-pilot under the shared USD 20 ceiling."
+        ),
     )
     live_parser.add_argument(
         "--model",

@@ -28,6 +28,7 @@ from mas_safety.live_analysis import (
     EXPECTED_REPETITIONS,
     EXPECTED_RUNS,
     MAX_AGENT_CALLS,
+    _strict_provider_contract,
     analyze_live_development,
 )
 from mas_safety.live_backends import (
@@ -36,6 +37,7 @@ from mas_safety.live_backends import (
     INSTRUCTIONS_SHA256,
     PROMPT_VERSION,
 )
+from mas_safety.live_budget import FROZEN_MODEL_IDS
 from mas_safety.models import ActionSpec, AgentDecision
 from mas_safety.scenarios import load_scenarios
 
@@ -74,13 +76,17 @@ class StructuredOracleBackend:
             "decision_schema_sha256": DECISION_SCHEMA_SHA256,
             "structured_output": "json_schema_strict",
             "store": False,
-            "max_output_tokens": 256,
+            "service_tier": "default",
+            "reasoning_effort": "low",
+            "max_output_tokens": 512,
             "temperature": "provider_default_unset",
             "top_p": "provider_default_unset",
             "tools": "none",
             "timeout_seconds": 120.0,
             "max_retries": 0,
             "seed_supported": False,
+            "hard_budget_enforced": True,
+            "budget_phase": "stage_1_live_feasibility",
         }
 
     def set_run_metadata(self, metadata: dict[str, object]) -> None:
@@ -250,6 +256,8 @@ def test_two_model_stage_one_run_is_192_paired_runs_and_passes_gates(
         requested_model_ids: object,
         hard_qa_attestation: object,
         raw_archive_audit: object,
+        smoke_attestation: object = None,
+        budget_audit: object = None,
     ) -> dict[str, object]:
         trace_tuple = tuple(traces)  # type: ignore[arg-type]
         captured.append(trace_tuple)
@@ -259,6 +267,8 @@ def test_two_model_stage_one_run_is_192_paired_runs_and_passes_gates(
             requested_model_ids=requested_model_ids,  # type: ignore[arg-type]
             hard_qa_attestation=hard_qa_attestation,  # type: ignore[arg-type]
             raw_archive_audit=raw_archive_audit,  # type: ignore[arg-type]
+            smoke_attestation=smoke_attestation,  # type: ignore[arg-type]
+            budget_audit=budget_audit,  # type: ignore[arg-type]
         )
 
     monkeypatch.setattr(live_module, "analyze_live_development", capture_analysis)
@@ -322,6 +332,19 @@ def test_two_model_stage_one_run_is_192_paired_runs_and_passes_gates(
     assert report["counts"]["workflow_runs"] == EXPECTED_RUNS
     assert report["counts"]["agent_calls"] <= MAX_AGENT_CALLS
 
+    drifted_contract = deepcopy(traces[0])
+    drifted_contract.backend_configuration["reasoning_effort"] = "medium"
+    assert _strict_provider_contract(drifted_contract) is False
+    drifted_contract.backend_configuration["reasoning_effort"] = "low"
+    drifted_contract.backend_configuration["max_output_tokens"] = 256
+    assert _strict_provider_contract(drifted_contract) is False
+    drifted_contract.backend_configuration["max_output_tokens"] = 512
+    drifted_contract.backend_configuration["service_tier"] = "auto"
+    assert _strict_provider_contract(drifted_contract) is False
+    drifted_contract.backend_configuration["service_tier"] = "default"
+    drifted_contract.backend_configuration["hard_budget_enforced"] = False
+    assert _strict_provider_contract(drifted_contract) is False
+
     manifest_path = output_dir / "model_call_manifest.json"
     trace_path = output_dir / "traces.jsonl"
     manifest = json.loads(manifest_path.read_text())
@@ -330,6 +353,11 @@ def test_two_model_stage_one_run_is_192_paired_runs_and_passes_gates(
     assert manifest["agent_calls_completed"] == report["counts"]["agent_calls"]
     assert manifest["matrix"]["expected_workflow_runs"] == EXPECTED_RUNS
     assert manifest["matrix"]["maximum_agent_calls"] == MAX_AGENT_CALLS
+    assert manifest["cost_preflight"]["calls_sized"] == MAX_AGENT_CALLS + 2
+    assert manifest["cost_preflight"]["fits_authorization"] is True
+    assert manifest["smoke_calls_completed"] == 2
+    assert manifest["smoke_attestation"]["pass"] is True
+    assert manifest["smoke_attestation"]["included_in_estimands_or_gates"] is False
     assert manifest["repository_freeze"] == TEST_FREEZE
     assert len(trace_path.read_text().splitlines()) == EXPECTED_RUNS
     assert stat.S_IMODE(output_dir.stat().st_mode) & 0o077 == 0
@@ -337,6 +365,7 @@ def test_two_model_stage_one_run_is_192_paired_runs_and_passes_gates(
     assert stat.S_IMODE(trace_path.stat().st_mode) & 0o077 == 0
 
     for artifact in (
+        "smoke_attestation.json",
         "runs.csv",
         "arm_metrics.csv",
         "mechanism_effects.csv",
@@ -426,6 +455,14 @@ def test_live_batch_checkpoints_an_abort_without_recording_exception_text(
             raise RuntimeError("sensitive provider error body")
 
     monkeypatch.setattr(live_module, "ExperimentRunner", FailingRunner)
+    monkeypatch.setattr(
+        live_module,
+        "_stage_one_cost_preflight",
+        lambda *_args: {
+            "byte_upper_bound_cost_nano_usd": 0,
+            "fits_authorization": True,
+        },
+    )
     output_dir = tmp_path / "aborted-live"
 
     with pytest.raises(RuntimeError, match="sensitive provider error body"):
@@ -547,7 +584,7 @@ def test_production_freeze_is_rechecked_after_hard_qa_before_provider_client(
     provider_client_constructed = False
 
     def fail_if_constructed(
-        _model_id: str, _raw_log_dir: Path
+        _model_id: str, _raw_log_dir: Path, **_kwargs: object
     ) -> StructuredOracleBackend:
         nonlocal provider_client_constructed
         provider_client_constructed = True
@@ -566,7 +603,7 @@ def test_production_freeze_is_rechecked_after_hard_qa_before_provider_client(
     with pytest.raises(RuntimeError, match="during the hard-QA preflight"):
         live_module.run_live_development(
             scenarios=load_scenarios(),
-            model_ids=("model-alpha-2026-08-01", "model-beta-2026-08-01"),
+            model_ids=FROZEN_MODEL_IDS,
             output_dir=tmp_path / "never-created",
             provenance_signing_key=b"k" * 32,
             provenance_key_id="test-live-key-v1",
@@ -602,8 +639,36 @@ def test_finalization_freeze_failure_invalidates_standalone_gate_report(
         "_run_hard_qa_attestation",
         lambda _freeze: {"required": True, "pass": True},
     )
-    monkeypatch.setattr(live_module, "_default_backend_factory", _backend_factory)
+    monkeypatch.setattr(
+        live_module,
+        "_acquire_provider_authority_lock",
+        lambda **_kwargs: {
+            "required": True,
+            "scope": "test_only_no_external_io",
+            "rerun_under_same_commit_authorized": False,
+        },
+    )
+    monkeypatch.setattr(
+        live_module,
+        "_default_backend_factory",
+        lambda model_id, raw_log_dir, **_kwargs: _backend_factory(
+            model_id, raw_log_dir
+        ),
+    )
     monkeypatch.setattr(live_module, "live_development_specs", one_spec)
+    monkeypatch.setattr(
+        live_module,
+        "_stage_one_cost_preflight",
+        lambda *_args: {
+            "byte_upper_bound_cost_nano_usd": 0,
+            "fits_authorization": True,
+        },
+    )
+    monkeypatch.setattr(
+        live_module,
+        "_run_out_of_study_smoke",
+        lambda **_kwargs: {"pass": True, "attempt_count": 2},
+    )
     monkeypatch.setattr(
         live_module,
         "_raw_archive_audit",
@@ -614,7 +679,7 @@ def test_finalization_freeze_failure_invalidates_standalone_gate_report(
     with pytest.raises(RuntimeError, match="during live-batch finalization"):
         live_module.run_live_development(
             scenarios=load_scenarios(),
-            model_ids=("model-alpha-2026-08-01", "model-beta-2026-08-01"),
+            model_ids=FROZEN_MODEL_IDS,
             output_dir=output_dir,
             provenance_signing_key=b"k" * 32,
             provenance_key_id="test-live-key-v1",

@@ -1,7 +1,8 @@
 # Same Symptom, Different Failure: Mechanism-Identifiable Evaluation of Compositional Safety in Multi-Agent Systems
 
-> **Draft status:** v0.2-live prospective methods scaffold. Bracketed result text
-> is withheld until the sealed live-agent study is run. The archived
+> **Draft status:** v0.2.1-live prospective methods scaffold and pre-live Stage 1
+> freeze. Bracketed result text is withheld until the sealed live-agent study is
+> run. The archived
 > v0.1-scripted numbers are engineering validation only.
 
 ## Abstract
@@ -207,6 +208,25 @@ the confirmatory matrix. For `N` sealed workflows, that primary matrix contains
 Defense replay does not require a new model call because defense identity and
 sidecars are hidden from the proposing model.
 
+Stage 1 freezes `gpt-5.5-2026-04-23` and `gpt-5.4-2026-03-05`, each with
+`reasoning.effort=low` and `max_output_tokens=512`. Before the study begins, one
+harmless structured-output smoke call per snapshot checks provider capability
+without using any study workflow. Those two calls are separately logged and
+excluded from the 192-run schedule, estimands, gates, and behavioral claims. The
+smoke calls and Stage 1 share a hard gross USD 20 spending ceiling; budget
+exhaustion stops the run and leaves the matrix incomplete, without retries or
+replacement calls. The request explicitly sets `service_tier="default"` to fix
+standard processing and pricing rather than inheriting an automatic or
+project-level tier. An exact private raw response retains the provider-returned
+tier, while release/public trace metadata omits it.
+The frozen offline 770-call maximum-output sizing bound is USD 19.601437500.
+Before each network call, an append-only hash-chained ledger durably holds a
+conservative 65,536-input/512-output-token allowance, settles valid usage at
+full uncached rates, and forfeits the allowance when usage is unavailable.
+The runtime also consumes a private one-shot authority for the exact frozen
+commit before any provider client is constructed; failure or interruption does
+not authorize a rerun.
+
 Before parsing, the study stores exact rendered messages and schemas, immutable
 model identifiers, provider request metadata, raw responses, refusal/finish
 fields, token counts, latency, and errors in private append-only logs. Parsed
@@ -255,7 +275,7 @@ the scripted oracle.
 These outcomes are unit-oracle predictions and are not evidence about model
 behavior or real defense effectiveness.
 
-### 5.2 V0.2 live-agent results
+### 5.2 V0.2.1 live-agent results
 
 **[WITHHELD UNTIL SEALED RUN]** Report, in order:
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import stat
 from pathlib import Path
@@ -13,8 +14,10 @@ from mas_safety.live_backends import (
     OPENAI_OFFICIAL_BASE_URL,
     OpenAIResponsesBackend,
     ProviderCallError,
+    ProviderContractError,
     StructuredDecisionError,
 )
+from mas_safety.live_budget import FROZEN_MODEL_IDS, LiveBudgetLedger
 from mas_safety.models import ActionSpec, Artifact, StageContext
 from mas_safety.runner import ExperimentRunner, RunSpec
 from mas_safety.scenarios import load_scenarios
@@ -29,6 +32,7 @@ class FakeResponse:
         self.model = payload.get("model", "snapshot-test-2026-08-01")
         self.created_at = payload.get("created_at", 1780000000)
         self.status = payload.get("status", "completed")
+        self.service_tier = payload.get("service_tier", "default")
         self.usage = _Usage()
 
     def model_dump(self, *, mode: str = "python") -> dict[str, object]:
@@ -83,9 +87,10 @@ class FakeResponses:
         return FakeResponse(
             {
                 "id": "resp_test",
-                "model": "snapshot-test-2026-08-01",
+                "model": kwargs["model"],
                 "created_at": 1780000000,
                 "status": self.status,
+                "service_tier": kwargs["service_tier"],
                 "usage": {"input_tokens": 41, "output_tokens": 9},
                 "output_text": json.dumps(payload),
             }
@@ -233,6 +238,9 @@ def test_live_backend_uses_strict_schema_and_maps_offered_action(
     request = client.responses.requests[0]
     assert request["store"] is False
     assert request["timeout"] == 120.0
+    assert request["service_tier"] == "default"
+    assert request["reasoning"] == {"effort": "low"}
+    assert request["max_output_tokens"] == 512
     assert "seed" not in request
     assert request["text"]["format"]["strict"] is True
     assert request["text"]["format"]["schema"]["additionalProperties"] is False
@@ -245,6 +253,9 @@ def test_live_backend_uses_strict_schema_and_maps_offered_action(
     assert backend.configuration["ambient_custom_headers_allowed"] is False
     assert backend.configuration["http_follow_redirects"] is False
     assert backend.configuration["http_trust_env"] is False
+    assert backend.configuration["service_tier"] == "default"
+    assert backend.configuration["reasoning_effort"] == "low"
+    assert backend.configuration["max_output_tokens"] == 512
 
     logged = list((tmp_path / "raw").glob("*.json"))
     assert {path.name.split(".")[-2] for path in logged} == {"request", "response"}
@@ -256,6 +267,9 @@ def test_live_backend_uses_strict_schema_and_maps_offered_action(
     assert request_record["provider_call_order"] == 1
     assert request_record["run_metadata"]["scheduled_workflow_run_order"] == 7
     assert request_record["run_metadata"]["batch_id"] == "test-live-batch"
+    assert request_record["provider_request"]["service_tier"] == "default"
+    assert request_record["provider_request"]["reasoning"] == {"effort": "low"}
+    assert request_record["provider_request"]["max_output_tokens"] == 512
     assert request_record["attempted_at_utc"].endswith("+00:00")
     assert len(request_record["prompt_sha256"]) == 64
     assert len(request_record["provider_request_sha256"]) == 64
@@ -269,6 +283,91 @@ def test_live_backend_uses_strict_schema_and_maps_offered_action(
             raw_log_dir=tmp_path / "raw",
             client=FakeClient(),
         )
+    with pytest.raises(ValueError, match="frozen at 512"):
+        OpenAIResponsesBackend(
+            model_id="test-model-2026-08-01",
+            raw_log_dir=tmp_path / "unfrozen-output-limit",
+            client=FakeClient(),
+            max_output_tokens=256,
+        )
+    assert not (tmp_path / "unfrozen-output-limit").exists()
+
+
+@pytest.mark.parametrize("contract_drift", ["resolved_model", "service_tier"])
+def test_budgeted_backend_aborts_on_frozen_response_contract_drift(
+    tmp_path: Path, contract_drift: str
+) -> None:
+    requested_model = FROZEN_MODEL_IDS[0]
+
+    class DriftResponses:
+        @staticmethod
+        def create(**kwargs: object) -> FakeResponse:
+            prompt = json.loads(str(kwargs["input"]))
+            payload = {
+                "decision": "execute",
+                "selected_action_id": prompt["candidate_action_id"],
+                "reason": None,
+                "missing_information": [],
+            }
+            return FakeResponse(
+                {
+                    "id": "resp_contract_drift",
+                    "model": (
+                        FROZEN_MODEL_IDS[1]
+                        if contract_drift == "resolved_model"
+                        else requested_model
+                    ),
+                    "status": "completed",
+                    "service_tier": (
+                        "priority"
+                        if contract_drift == "service_tier"
+                        else "default"
+                    ),
+                    "usage": {"input_tokens": 41, "output_tokens": 9},
+                    "output_text": json.dumps(payload),
+                }
+            )
+
+    class DriftClient:
+        responses = DriftResponses()
+
+    ledger = LiveBudgetLedger(tmp_path / "budget.jsonl")
+    backend = OpenAIResponsesBackend(
+        model_id=requested_model,
+        raw_log_dir=tmp_path / "raw",
+        client=DriftClient(),
+        sdk_version="test-sdk",
+        budget_ledger=ledger,
+    )
+    candidate = _action()
+
+    with pytest.raises(
+        ProviderContractError, match="frozen model or service-tier"
+    ) as raised:
+        backend.decide(
+            context=_context(),
+            decision_mode=DecisionMode.EXECUTION_DECISION,
+            candidate_action=candidate,
+            offered_actions=(candidate,),
+            artifact=None,
+            seed=17,
+        )
+
+    assert raised.value.abort_live_batch is True
+    assert raised.value.provider_metadata["failure_type"] == "provider_contract"
+    assert ledger.snapshot()["reservations_settled"] == 1
+    assert ledger.snapshot()["active_reservations"] == 0
+    response_record = json.loads(
+        next((tmp_path / "raw").glob("*.response.json")).read_text()
+    )
+    assert response_record["provider_response"]["model"] == (
+        FROZEN_MODEL_IDS[1]
+        if contract_drift == "resolved_model"
+        else requested_model
+    )
+    assert response_record["provider_response"]["service_tier"] == (
+        "priority" if contract_drift == "service_tier" else "default"
+    )
 
 
 def test_noncompleted_response_cannot_execute_even_with_valid_json(
@@ -354,12 +453,31 @@ def test_http_provider_error_preserves_private_body_without_headers(
 
 def test_raw_archive_audit_verifies_and_detects_tampering(tmp_path: Path) -> None:
     destination = tmp_path / "live-batch"
-    model_id = "test-model-2026-08-01"
+    model_id = "gpt-5.4-2026-03-05"
+    budget_ledger = LiveBudgetLedger(destination / "budget_ledger.jsonl")
+    smoke_backend = OpenAIResponsesBackend(
+        model_id=model_id,
+        raw_log_dir=destination / "smoke_raw_responses" / "model-01",
+        client=FakeClient(),
+        sdk_version="test-sdk",
+        budget_ledger=budget_ledger,
+        budget_phase="pre_stage_1_smoke",
+    )
+    smoke_context, smoke_action = live_module._smoke_fixture("s" * 24)
+    smoke_backend.decide(
+        context=smoke_context,
+        decision_mode=DecisionMode.EXECUTION_DECISION,
+        candidate_action=smoke_action,
+        offered_actions=(smoke_action,),
+        artifact=None,
+        seed=1,
+    )
     backend = OpenAIResponsesBackend(
         model_id=model_id,
         raw_log_dir=destination / "raw_responses" / "model-01",
         client=FakeClient(),
         sdk_version="test-sdk",
+        budget_ledger=budget_ledger,
     )
     scenario = load_scenarios()[0]
     spec = RunSpec(
@@ -411,9 +529,102 @@ def test_raw_archive_audit_verifies_and_detects_tampering(tmp_path: Path) -> Non
     assert audit["request_record_count"] == len(trace.steps)
     assert audit["response_record_count"] == len(trace.steps)
 
-    response_path = next(
-        (destination / "raw_responses" / "model-01").glob("*.response.json")
+    smoke_response_path = next(
+        (destination / "smoke_raw_responses" / "model-01").glob(
+            "*.response.json"
+        )
     )
+    original_smoke_response = smoke_response_path.read_bytes()
+    smoke_record = json.loads(original_smoke_response)
+    smoke_record["budget_event"]["reservation_id"] = "budget-tampered"
+    smoke_response_path.write_text(
+        json.dumps(smoke_record, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    smoke_tampered = live_module._raw_archive_audit(
+        destination,
+        [trace],
+        [model_id],
+        repository_freeze=repository_freeze,
+        required=True,
+    )
+    assert smoke_tampered["pass"] is False
+    assert smoke_tampered["checks"]["smoke_budget_links_match_ledger"] is False
+    smoke_response_path.write_bytes(original_smoke_response)
+
+    audited_step = trace.steps[0]
+    response_path = (
+        destination
+        / "raw_responses"
+        / "model-01"
+        / f"{audited_step.provider_metadata['raw_log_record']}.response.json"
+    )
+    original_response = response_path.read_bytes()
+    response_record = json.loads(original_response)
+    response_record["provider_response"]["usage"]["input_tokens"] += 1
+    usage_tampered_bytes = (
+        json.dumps(response_record, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    response_path.write_bytes(usage_tampered_bytes)
+    original_result_hash = audited_step.provider_metadata["result_record_sha256"]
+    audited_step.provider_metadata["result_record_sha256"] = hashlib.sha256(
+        usage_tampered_bytes
+    ).hexdigest()
+    trace_path = destination / "traces.jsonl"
+    trace_path.write_text(
+        json.dumps(trace.to_dict(), sort_keys=True) + "\n", encoding="utf-8"
+    )
+    usage_tampered = live_module._raw_archive_audit(
+        destination,
+        [trace],
+        [model_id],
+        repository_freeze=repository_freeze,
+        required=True,
+    )
+    assert usage_tampered["pass"] is False
+    assert usage_tampered["checks"]["raw_usage_matches_ledger_and_trace"] is False
+    assert (
+        usage_tampered["checks"]["result_records_parse_hash_and_match_trace"]
+        is True
+    )
+
+    response_path.write_bytes(original_response)
+    audited_step.provider_metadata["result_record_sha256"] = original_result_hash
+    trace_path.write_text(
+        json.dumps(trace.to_dict(), sort_keys=True) + "\n", encoding="utf-8"
+    )
+    restored = live_module._raw_archive_audit(
+        destination,
+        [trace],
+        [model_id],
+        repository_freeze=repository_freeze,
+        required=True,
+    )
+    assert restored["pass"] is True
+
+    orphan = budget_ledger.reserve(
+        phase="stage_1_live_feasibility",
+        model_id=model_id,
+        call_stem="call-999999-orphan",
+        request_sha256="f" * 64,
+        request_utf8_bytes=100,
+    )
+    budget_ledger.settle(orphan, input_tokens=1, output_tokens=1)
+    orphaned_attempt = live_module._raw_archive_audit(
+        destination,
+        [trace],
+        [model_id],
+        repository_freeze=repository_freeze,
+        required=True,
+    )
+    assert orphaned_attempt["pass"] is False
+    assert (
+        orphaned_attempt["checks"][
+            "ledger_provider_attempt_set_matches_raw_records"
+        ]
+        is False
+    )
+
     response_path.write_text("{}\n", encoding="utf-8")
     tampered = live_module._raw_archive_audit(
         destination,
