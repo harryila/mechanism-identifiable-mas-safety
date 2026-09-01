@@ -1,116 +1,172 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
-from .models import ActionSpec, Artifact, RunTrace, StageContext
-
-
-@dataclass(frozen=True)
-class Proposal:
-    action: ActionSpec
-    raw_output: str
-    input_tokens: int
-    output_tokens: int
-    latency_ms: float
-    refusal: bool = False
-    capability_failure: bool = False
+from .enums import AgentDecisionKind, DecisionMode, Role
+from .models import ActionSpec, AgentDecision, Artifact, RunTrace, StageContext
 
 
 class AgentBackend(Protocol):
-    """Boundary for scripted or live action generation.
+    """Boundary for scripted or live execution decisions.
 
-    Backends propose actions only. Executable policies and the terminal-state
-    evaluator remain outside the model boundary.
+    A backend receives only its defensive local context, the candidate operation,
+    and the finite set of actions that the trusted runtime is willing to execute.
+    Returning ``EXECUTE`` is a request, not authority: the runner checks exact
+    offered-set membership before any simulated side effect.
     """
 
     name: str
     model_id: str
     configuration: dict[str, object]
 
-    def propose(
+    def decide(
         self,
         *,
         context: StageContext,
-        declared_action: ActionSpec,
+        decision_mode: DecisionMode,
+        candidate_action: ActionSpec,
+        offered_actions: tuple[ActionSpec, ...],
         artifact: Artifact | None,
         seed: int,
-    ) -> Proposal: ...
+    ) -> AgentDecision: ...
 
 
 class ScriptedBackend:
-    """Deterministic executable-specification oracle.
+    """Deterministic v0.2 executable-specification oracle.
 
-    This backend is intentionally not a behavioral model. It always proposes the
-    declared stage action so the experiment plumbing can be tested exactly.
+    The oracle preserves the v0.1 pilot's behavior by choosing the declared
+    candidate at every stage. Unlike v0.1, the runtime executes that action only
+    after validating this typed decision against the offered-action set.
     """
 
     name = "scripted"
+    # Retain the v0.1 oracle identifier so historical scripted analyses remain
+    # directly comparable; the configuration records the upgraded interface.
     model_id = "scripted-oracle-v1"
     configuration: ClassVar[dict[str, object]] = {"mode": "deterministic_oracle"}
 
-    def propose(
+    def decide(
         self,
         *,
         context: StageContext,
-        declared_action: ActionSpec,
+        decision_mode: DecisionMode,
+        candidate_action: ActionSpec,
+        offered_actions: tuple[ActionSpec, ...],
         artifact: Artifact | None,
         seed: int,
-    ) -> Proposal:
-        del context, artifact, seed
-        action = ActionSpec(
-            role=declared_action.role,
-            name=declared_action.name,
-            terminal=declared_action.terminal,
-            parameters=dict(declared_action.parameters),
-        )
-        return Proposal(
-            action=action,
+    ) -> AgentDecision:
+        del context, artifact
+        action = _copy_action(candidate_action)
+        return AgentDecision.execute(
+            action,
             raw_output=json.dumps(
-                {"action": action.name, "parameters": action.parameters},
+                {
+                    "decision": AgentDecisionKind.EXECUTE.value,
+                    "action": _action_dict(action),
+                },
                 sort_keys=True,
             ),
-            input_tokens=0,
-            output_tokens=0,
-            latency_ms=0.0,
+            provider_metadata={
+                "resolved_response_model": self.model_id,
+                "status": "completed",
+                "seed": seed,
+                "decision_mode": decision_mode.value,
+                "offered_action_count": len(offered_actions),
+            },
         )
 
 
 class FrozenTraceBackend:
-    """Replay the exact typed proposals recorded in one source trace."""
+    """Replay the exact typed decisions recorded in one source trace."""
 
     name = "frozen_replay"
-    configuration: ClassVar[dict[str, object]] = {"mode": "frozen_proposal_replay"}
+    configuration: ClassVar[dict[str, object]] = {"mode": "frozen_decision_replay"}
 
     def __init__(self, source_trace: RunTrace):
         self.source_trace = source_trace
         self.model_id = f"{source_trace.model_id}:frozen-replay"
         self._steps = {step.role: step for step in source_trace.steps}
 
-    def propose(
+    def decide(
         self,
         *,
         context: StageContext,
-        declared_action: ActionSpec,
+        decision_mode: DecisionMode,
+        candidate_action: ActionSpec,
+        offered_actions: tuple[ActionSpec, ...],
         artifact: Artifact | None,
         seed: int,
-    ) -> Proposal:
-        del declared_action, artifact, seed
+    ) -> AgentDecision:
+        del decision_mode, candidate_action, offered_actions, artifact, seed
         step = self._steps[context.role]
-        action_data = step.proposed_action
+        decision_data = getattr(step, "agent_decision", {})
+        kind_value = decision_data.get("kind") if isinstance(decision_data, dict) else None
+        raw_output = step.raw_model_output or ""
+        metadata = dict(getattr(step, "provider_metadata", {}))
+        metadata["source_run_id"] = self.source_trace.run_id
+
+        if kind_value == AgentDecisionKind.REFUSE.value or step.refusal:
+            reason = decision_data.get("reason") if isinstance(decision_data, dict) else None
+            return AgentDecision.refuse(
+                str(reason or "Replayed model refusal."),
+                raw_output=raw_output,
+                provider_metadata=metadata,
+            )
+        if kind_value == AgentDecisionKind.ESCALATE.value or getattr(
+            step, "escalation", False
+        ):
+            missing = (
+                decision_data.get("missing_information", ())
+                if isinstance(decision_data, dict)
+                else ()
+            )
+            if not isinstance(missing, (list, tuple)) or not missing:
+                missing = ("replayed_missing_information",)
+            return AgentDecision.escalate(
+                tuple(str(item) for item in missing),
+                raw_output=raw_output,
+                provider_metadata=metadata,
+            )
+
+        action_data = getattr(step, "selected_action", None) or getattr(
+            step, "proposed_action", None
+        )
+        if not isinstance(action_data, dict):
+            # Deliberately malformed: the runner records this as a capability
+            # failure rather than inventing an executable action.
+            return AgentDecision(  # type: ignore[arg-type]
+                kind=AgentDecisionKind.EXECUTE,
+                action=action_data,
+                raw_output=raw_output,
+                provider_metadata=metadata,
+            )
         action = ActionSpec(
-            role=context.role,
+            role=Role(action_data["role"]),
             name=str(action_data["name"]),
-            terminal=bool(action_data["terminal"]),
+            terminal=action_data["terminal"],
             parameters=dict(action_data["parameters"]),
         )
-        return Proposal(
-            action=action,
-            raw_output=step.raw_model_output or "",
-            input_tokens=0,
-            output_tokens=0,
-            latency_ms=0.0,
-            refusal=step.refusal,
-            capability_failure=step.capability_failure,
+        return AgentDecision.execute(
+            action,
+            raw_output=raw_output,
+            provider_metadata=metadata,
         )
+
+
+def _copy_action(action: ActionSpec) -> ActionSpec:
+    return ActionSpec(
+        role=action.role,
+        name=action.name,
+        terminal=action.terminal,
+        parameters=dict(action.parameters),
+    )
+
+
+def _action_dict(action: ActionSpec) -> dict[str, object]:
+    return {
+        "role": action.role.value,
+        "name": action.name,
+        "terminal": action.terminal,
+        "parameters": dict(action.parameters),
+    }

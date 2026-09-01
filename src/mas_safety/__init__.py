@@ -1,10 +1,22 @@
 """Mechanism-identifiable compositional safety experiment harness."""
 
-from .enums import Architecture, Defense, Mechanism, Role, SafetyVariant
+from .enums import (
+    AgentDecisionKind,
+    Architecture,
+    DecisionMode,
+    Defense,
+    Mechanism,
+    Role,
+    SafetyVariant,
+)
+from .models import AgentDecision
 from .runner import ExperimentRunner, RunSpec
 
 __all__ = [
+    "AgentDecision",
+    "AgentDecisionKind",
     "Architecture",
+    "DecisionMode",
     "Defense",
     "ExperimentRunner",
     "Mechanism",
@@ -13,4 +25,4 @@ __all__ = [
     "SafetyVariant",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

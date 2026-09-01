@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mechanism-identifiable-mas-safety"
-version = "0.1.0"
+version = "0.2.0"
 description = "A controlled harness for mechanism-identifiable compositional safety experiments."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,7 +17,8 @@ Repository = "https://github.com/harryila/mechanism-identifiable-mas-safety"
 Issues = "https://github.com/harryila/mechanism-identifiable-mas-safety/issues"
 
 [project.optional-dependencies]
-dev = ["jsonschema>=4.23", "pytest>=8.0"]
+dev = ["jsonschema>=4.23", "pytest>=8.0", "openai==3.6.0"]
+live-openai = ["openai==3.6.0"]
 notebook = ["jupyter>=1.1", "nbclient>=0.10", "nbformat>=5.10"]
 
 [project.scripts]

@@ -15,14 +15,15 @@ def build_notebook() -> nbformat.NotebookNode:
     new_code = nbformat.v4.new_code_cell
     cells = [
         new_markdown(
-            "# Deterministic pilot analysis\n\n"
-            "This notebook is the reproducible analysis companion for the two-workflow "
-            "mechanism-identifiable pilot. The scripted backend is an executable "
+            "# v0.2 scripted preflight analysis\n\n"
+            "This notebook is the reproducible analysis companion for the current "
+            "two-workflow v0.2 scripted compatibility/preflight run. The exact v0.1 "
+            "archive is tag-bound; this scripted backend remains an executable "
             "specification, not empirical model evidence."
         ),
         new_markdown(
             "## tl;dr\n\n"
-            "The generated pilot contains 192 deterministic traces: 160 paired "
+            "The generated v0.2 preflight contains 192 deterministic traces: 160 paired "
             "mechanism-on/off core cells plus 32 architecture/reference cells. The "
             "harness checks pass and the scripted oracle exhibits the preregistered "
             "mechanism-specific profiles. The empirical decision remains "

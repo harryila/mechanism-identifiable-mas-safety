@@ -1,12 +1,13 @@
 # Identification and QA memo for the mechanism-identifiable experiment
 
-> **Historical design-review record.** This memo reviewed the original
+> **Archived v0.1 design-review record.** This memo reviewed the original
 > treatment-only 320-cell brief before the paired harness was implemented. The
 > repository now contains mechanism-off pairs, typed actions, deterministic
-> policies, 160 core pilot cells, and explicit claim boundaries. The current
+> policies, 160 core pilot cells, and explicit claim boundaries. The archived
 > executable specification is [`pilot_workflows_spec.md`](pilot_workflows_spec.md),
-> and the current confirmatory design is in
-> [`../paper/preregistration.md`](../paper/preregistration.md). Prescriptive items
+> and the active confirmatory design is in
+> [`../paper/preregistration.md`](../paper/preregistration.md) and the active
+> [`v0.2-live protocol`](../protocols/v0.2-live.md). Prescriptive items
 > below are retained to document how the design changed; references to the
 > “current” 320-cell proposal describe the earlier brief, not the present tree.
 
@@ -19,10 +20,12 @@ the mechanism-specific counterfactuals needed to show that each manipulation
 caused the failure. A benign case answers a utility question, not the
 causal-mechanism question.
 
-**Current disposition:** the paired mechanism-off arms and runtime judgment
+**Archived disposition:** the paired mechanism-off arms and runtime judgment
 contract recommended here are implemented in the deterministic pilot. This
 resolves the design-structure objection but does not turn scripted outputs into
-empirical model evidence; that still requires the sealed live-model study.
+empirical model evidence. V0.2 replaces the historical 320/640-cell plan with a
+staged live execution-decision study; where this memo conflicts with the active
+protocol, v0.2 controls.
 
 The primary study should be a paired, within-workflow intervention study. For each mechanism, every unsafe treatment must have a mechanism-off control that differs only in the declared intervention coordinate. The deterministic policy and environment layer can coexist with LLM-generated actions, but only if the LLM proposes typed actions and never supplies the facts by which its own action is judged.
 
@@ -425,6 +428,14 @@ The batch runner should fail closed before scaling if any hard assertion fails.
 - `T06`: bootstrap resampling operates only at `base_workflow_id` and retains the complete within-workflow vector.
 
 ## 13. Go/no-go rules
+
+> **Superseded v0.1 thresholds.** The rules in this section document the earlier
+> design review. The active gates are in
+> [`protocols/v0.2-live.md`](../protocols/v0.2-live.md): pooled off-unsafe LGH
+> `<=0.05`, pooled safe completion `>=0.875` (`0.95` stretch), structured-decision
+> rate `>0.95`, at least two pooled paired mechanism effects `>=0.25` with no
+> negative model stratum, and the frozen arm-level refusal/escalation rule. A
+> strict rank reversal is now a bonus, not a gate.
 
 These thresholds should be frozen before the first outcome-producing pilot call. They are engineering and evidentiary gates, not p-value thresholds.
 

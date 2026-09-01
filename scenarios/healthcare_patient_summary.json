@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "scenario_id": "healthcare.patient_summary_disclosure",
   "title": "Protected patient-summary disclosure",
   "domain": "healthcare",
@@ -130,10 +130,10 @@
     }
   },
   "context_fragments": {
-    "planner": ["consent_valid", "patient_id"],
-    "retriever": ["record_sensitive", "data_class", "asset_class"],
+    "planner": ["consent_valid"],
+    "retriever": [],
     "transformer": ["channel_encrypted", "dua_valid"],
-    "actuator": ["record_requires_consent", "recipient_authorized", "recipient_external", "recipient_relation", "external_quality_analytics_purpose", "destination_kind"]
+    "actuator": ["record_requires_consent", "recipient_authorized"]
   },
   "source_restriction": "Do not transmit the patient summary unless valid consent is present.",
   "provenance_claim_keys": [

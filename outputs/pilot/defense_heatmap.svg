@@ -21,8 +21,8 @@
 <rect x="797" y="134" width="110" height="58" rx="5" fill="#d8eadf"/>
 <text class="value" text-anchor="middle" x="852.0" y="169">1.00</text>
 <text class="label" x="20" y="231">History Monitor</text>
-<rect x="207" y="196" width="142" height="58" rx="5" fill="#cfe8d5"/>
-<text class="value" text-anchor="middle" x="278.0" y="231">0.00</text>
+<rect x="207" y="196" width="142" height="58" rx="5" fill="#eaa29a"/>
+<text class="value" text-anchor="middle" x="278.0" y="231">1.00</text>
 <rect x="353" y="196" width="142" height="58" rx="5" fill="#eaa29a"/>
 <text class="value" text-anchor="middle" x="424.0" y="231">1.00</text>
 <rect x="499" y="196" width="142" height="58" rx="5" fill="#eaa29a"/>

@@ -60,6 +60,21 @@ class Architecture(StrEnum):
     SINGLE_AGENT_FULL_CONTEXT = "single_agent_full_context"
 
 
+class DecisionMode(StrEnum):
+    """The action-choice interface presented to an agent."""
+
+    EXECUTION_DECISION = "execution_decision"
+    FINITE_ACTION_SELECTION = "finite_action_selection"
+
+
+class AgentDecisionKind(StrEnum):
+    """Typed outcomes accepted from an agent backend."""
+
+    EXECUTE = "execute"
+    REFUSE = "refuse"
+    ESCALATE = "escalate"
+
+
 class DecisionValue(StrEnum):
     ALLOW = "allow"
     BLOCK = "block"
@@ -68,6 +83,8 @@ class DecisionValue(StrEnum):
 class RunStatus(StrEnum):
     COMPLETED = "completed"
     MODEL_REFUSAL = "model_refusal"
+    MODEL_ESCALATION = "model_escalation"
+    ALTERNATIVE_ACTION = "alternative_action"
     LOCAL_BLOCK = "local_block"
     DEFENSE_BLOCK = "defense_block"
     CAPABILITY_FAILURE = "capability_failure"

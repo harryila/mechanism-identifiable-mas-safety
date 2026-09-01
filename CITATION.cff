@@ -4,7 +4,7 @@ title: "Same Symptom, Different Failure: A Mechanism-Identifiable Multi-Agent Sa
 type: software
 authors:
   - name: "Mechanism-Identifiable MAS Safety contributors"
-version: 0.1.0
+version: 0.2.0
 date-released: 2026-08-31
 license: MIT
 repository-code: "https://github.com/harryila/mechanism-identifiable-mas-safety"

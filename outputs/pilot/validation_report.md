@@ -18,8 +18,12 @@ The paired mechanism-on/off cells, matched-safe variants, single-agent controls,
 - steps_have_required_fields: Verified
 - model_artifacts_exclude_defense_sidecars: Verified
 - defense_inputs_respect_observability_contract: Verified
-- valid_proposals_match_declared_actions: Verified
-- refusals_and_schema_errors_never_execute: Verified
+- primary_accepted_actions_match_candidate: Verified
+- accepted_actions_are_offered: Verified
+- executed_actions_match_accepted_selection: Verified
+- nonexecution_decisions_never_execute: Verified
+- model_policy_views_are_local_only: Verified
+- provider_metadata_excludes_credentials: Verified
 - run_ids_unique: Verified
 - trace_and_csv_run_ids_match: Verified
 - paired_design_cell_count: Verified
@@ -27,6 +31,7 @@ The paired mechanism-on/off cells, matched-safe variants, single-agent controls,
 - lgh_definition_consistent: Verified
 - all_local_allow_recomputes: Verified
 - terminal_status_consistent: Verified
+- attempted_and_skipped_roles_partition_pipeline: Verified
 - safe_unsafe_authoritative_diff_is_single_field: Verified
 - cross_defense_role_inputs_match: Verified
 - component_hashes_recompute: Verified

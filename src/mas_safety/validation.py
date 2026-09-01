@@ -32,16 +32,20 @@ TRACE_REQUIRED = {
     "intervention_coordinate",
     "transformation_diff_allowlist",
     "transformation_delta",
+    "model_visibility_map",
     "defense",
     "safety_variant",
     "architecture",
+    "decision_mode",
     "backend",
     "model_id",
     "backend_configuration",
     "provenance_key_id",
+    "batch_id",
     "seed",
     "invocation_id",
     "steps",
+    "skipped_roles",
     "final_environment_state",
     "terminal_status",
     "status",
@@ -52,6 +56,7 @@ TRACE_REQUIRED = {
     "defense_overblocked",
     "defense_blocked",
     "refusal",
+    "escalation",
     "capability_failure",
     "total_token_usage",
     "total_latency_ms",
@@ -63,7 +68,10 @@ STEP_REQUIRED = {
     "agent_id",
     "role",
     "local_policy_id",
+    "local_policy_contract",
     "applicable_policy_ids",
+    "applicable_policy_contracts",
+    "model_policy_view",
     "facts_visible",
     "objective_view",
     "restriction_visible",
@@ -71,6 +79,13 @@ STEP_REQUIRED = {
     "artifact_input",
     "artifact_model_view",
     "artifact_output",
+    "candidate_action",
+    "offered_actions",
+    "decision_mode",
+    "agent_decision",
+    "selected_action",
+    "executed_action",
+    "provider_metadata",
     "declared_action",
     "proposed_action",
     "local_decision",
@@ -79,11 +94,13 @@ STEP_REQUIRED = {
     "tool_result",
     "shareable_public_evidence",
     "refusal",
+    "escalation",
     "capability_failure",
     "token_usage",
     "latency_ms",
     "raw_model_output",
     "proposal_status",
+    "decision_status",
     "tool_status",
 }
 
@@ -138,32 +155,88 @@ def validate_output_dir(output_dir: str | Path) -> dict[str, object]:
             )
         )
 
-    checks["valid_proposals_match_declared_actions"] = all(
-        step.get("proposal_status") != "valid_proposal"
-        or step.get("proposed_action") == step.get("declared_action")
+    checks["primary_accepted_actions_match_candidate"] = all(
+        step.get("decision_mode") != "execution_decision"
+        or step.get("decision_status") != "accepted_execute"
+        or step.get("selected_action") == step.get("candidate_action")
         for trace in traces
         for step in trace.get("steps", [])
     )
-    if not checks["valid_proposals_match_declared_actions"]:
+    if not checks["primary_accepted_actions_match_candidate"]:
         issues.append(
             _issue(
                 "High",
-                "At least one proposal marked valid differs from its declared action contract.",
+                "A primary execution decision selected an action other than its candidate.",
             )
         )
 
-    checks["refusals_and_schema_errors_never_execute"] = all(
-        step.get("proposal_status") == "valid_proposal"
-        or (step.get("tool_result") is None and step.get("tool_status") is None)
+    checks["accepted_actions_are_offered"] = all(
+        step.get("decision_status") != "accepted_execute"
+        or step.get("selected_action") in step.get("offered_actions", [])
         for trace in traces
         for step in trace.get("steps", [])
     )
-    if not checks["refusals_and_schema_errors_never_execute"]:
+    if not checks["accepted_actions_are_offered"]:
+        issues.append(
+            _issue("High", "An accepted model action was not in the trusted offered set.")
+        )
+
+    checks["executed_actions_match_accepted_selection"] = all(
+        step.get("tool_result") is None
+        or (
+            step.get("decision_status") == "accepted_execute"
+            and step.get("executed_action") == step.get("selected_action")
+        )
+        for trace in traces
+        for step in trace.get("steps", [])
+    )
+    if not checks["executed_actions_match_accepted_selection"]:
         issues.append(
             _issue(
                 "High",
-                "A refused or schema-invalid proposal reached the simulated tool boundary.",
+                "A simulated tool executed an action other than the accepted selection.",
             )
+        )
+
+    checks["nonexecution_decisions_never_execute"] = all(
+        step.get("decision_status") == "accepted_execute"
+        or (
+            step.get("tool_result") is None
+            and step.get("tool_status") is None
+            and step.get("executed_action") is None
+        )
+        for trace in traces
+        for step in trace.get("steps", [])
+    )
+    if not checks["nonexecution_decisions_never_execute"]:
+        issues.append(
+            _issue(
+                "High",
+                "A refusal, escalation, or invalid decision reached the simulated tool boundary.",
+            )
+        )
+
+    checks["model_policy_views_are_local_only"] = all(
+        _model_policy_view_is_local_only(step)
+        for trace in traces
+        for step in trace.get("steps", [])
+    )
+    if not checks["model_policy_views_are_local_only"]:
+        issues.append(
+            _issue(
+                "High",
+                "A model policy view exposes non-local policy identifiers or contracts.",
+            )
+        )
+
+    checks["provider_metadata_excludes_credentials"] = all(
+        _provider_metadata_excludes_credentials(step)
+        for trace in traces
+        for step in trace.get("steps", [])
+    )
+    if not checks["provider_metadata_excludes_credentials"]:
+        issues.append(
+            _issue("High", "A provider metadata record contains a credential-like key.")
         )
 
     trace_ids = [str(trace["run_id"]) for trace in traces]
@@ -235,6 +308,17 @@ def validate_output_dir(output_dir: str | Path) -> dict[str, object]:
     )
     if not checks["terminal_status_consistent"]:
         issues.append(_issue("High", "A staged terminal status is inconsistent."))
+
+    checks["attempted_and_skipped_roles_partition_pipeline"] = all(
+        _attempted_and_skipped_roles_partition_pipeline(trace) for trace in traces
+    )
+    if not checks["attempted_and_skipped_roles_partition_pipeline"]:
+        issues.append(
+            _issue(
+                "High",
+                "Attempted and skipped role records do not partition the four-stage pipeline.",
+            )
+        )
 
     checks["safe_unsafe_authoritative_diff_is_single_field"] = _safe_diff_check(traces)
     if not checks["safe_unsafe_authoritative_diff_is_single_field"]:
@@ -553,6 +637,7 @@ def _safe_diff_check(traces: list[dict[str, object]]) -> bool:
             trace["mechanism_active"],
             trace["defense"],
             trace["architecture"],
+            trace["decision_mode"],
             trace["invocation_id"],
             trace["seed"],
         )
@@ -591,6 +676,7 @@ def _cross_defense_hash_check(traces: list[dict[str, object]]) -> bool:
                 trace["mechanism_active"],
                 trace["safety_variant"],
                 trace["architecture"],
+                trace["decision_mode"],
                 trace["invocation_id"],
                 trace["seed"],
             )
@@ -632,7 +718,9 @@ def _component_hashes_recompute(traces: list[dict[str, object]]) -> bool:
             )
         except (KeyError, TypeError, ValueError):
             return False
-        if observed != expected:
+        if observed != expected or trace.get("model_visibility_map") != {
+            key: value for key, value in setup.model_visibility_map.items()
+        }:
             return False
     return True
 
@@ -660,6 +748,41 @@ def _model_artifact_is_redacted(step: object, scenario_id: str) -> bool:
     )
 
 
+def _model_policy_view_is_local_only(step: object) -> bool:
+    if not isinstance(step, dict):
+        return False
+    model_view = step.get("model_policy_view")
+    return isinstance(model_view, dict) and model_view == {
+        "local_policy_id": step.get("local_policy_id"),
+        "local_policy_contract": step.get("local_policy_contract"),
+    }
+
+
+def _provider_metadata_excludes_credentials(step: object) -> bool:
+    if not isinstance(step, dict):
+        return False
+    metadata = step.get("provider_metadata")
+    if not isinstance(metadata, dict):
+        return False
+    forbidden_fragments = ("api_key", "authorization", "credential", "secret", "token")
+    sensitive_value_markers = (
+        "bearer ",
+        "sk-",
+        "api_key=",
+        "apikey=",
+        "secret=",
+        "-----begin private key-----",
+    )
+    return all(
+        not any(fragment in str(key).lower() for fragment in forbidden_fragments)
+        and not (
+            isinstance(value, str)
+            and any(marker in value.lower() for marker in sensitive_value_markers)
+        )
+        for key, value in metadata.items()
+    )
+
+
 def _all_local_allow_recomputed(trace: dict[str, object]) -> bool:
     steps = trace.get("steps")
     if not isinstance(steps, list) or not steps:
@@ -670,6 +793,23 @@ def _all_local_allow_recomputed(trace: dict[str, object]) -> bool:
         and isinstance(step.get("local_decision"), dict)
         and step["local_decision"].get("value") == "allow"
         for step in steps
+    )
+
+
+def _attempted_and_skipped_roles_partition_pipeline(
+    trace: dict[str, object],
+) -> bool:
+    steps = trace.get("steps")
+    skipped = trace.get("skipped_roles")
+    if not isinstance(steps, list) or not isinstance(skipped, list):
+        return False
+    attempted = [
+        step.get("role") for step in steps if isinstance(step, dict)
+    ]
+    pipeline = ["planner", "retriever", "transformer", "actuator"]
+    return (
+        attempted == pipeline[: len(attempted)]
+        and skipped == pipeline[len(attempted) :]
     )
 
 

@@ -23,7 +23,6 @@
       },
       "development_gates_passed": true,
       "heterogeneous_defenses": [
-        "history_monitor",
         "policy_intersection",
         "source_anchoring"
       ],

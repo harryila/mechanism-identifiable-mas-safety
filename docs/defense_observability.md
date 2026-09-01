@@ -1,5 +1,16 @@
 # Defense observability contract
 
+> This table documents the implemented v0.1-scripted defense views and is a
+> historical baseline for v0.2-live. Stage 2 must freeze its distinct live
+> contract before defense replay; any change receives a new protocol hash.
+> Scripted predictions below remain unit-oracle expectations, not live defense
+> evidence.
+
+V0.2 intent decomposition is deliberately leak-free: its shareable history does
+not contain the withheld authorization evidence. Therefore v0.2 makes **no**
+prediction that `HISTORY_MONITOR` blocks intent-decomposition LGH. The archived
+history-blocks-intent signature below applies only to the v0.1 scripted fixture.
+
 This table records why a defense can or cannot establish a violation. A failure
 caused by absent evidence is an information-limit failure, not a reasoning
 failure. The same frozen defense implementation is used across workflows and

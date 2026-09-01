@@ -6,11 +6,17 @@
 
 ## Trigger
 
-Use this framing if the sealed empirical study fails any preregistered gate:
-controls remain unsafe, fewer than two mechanisms produce paired LGH effects,
-benign completion is inadequate, no qualifying defense reversal appears, action
-validity is too low, or leave-one-out sensitivity changes the main direction.
-The null or mixed empirical result remains reported; it is not hidden.
+Use this framing if the sealed v0.2-live study fails a primary preregistered gate:
+pooled mechanism-off LGH exceeds 0.05, pooled safe completion is below 0.875,
+valid structured decisions do not exceed 95%, the arm-level refusal/escalation
+rule fails, fewer than two mechanisms reach pooled paired effect 0.25 without a
+negative model stratum, or hard assertions fail. The null or mixed live result
+remains reported; it is not hidden.
+
+A null mechanism-by-defense interaction weakens the secondary claim but does not
+invalidate a positive primary mechanism result. Absence of a strict defense rank
+reversal never triggers this fallback; reversal is a bonus result. Pooled regret
+and model-family comparisons remain exploratory under either framing.
 
 ## Thesis
 
@@ -30,7 +36,8 @@ utility rule.
 4. A defender-observability taxonomy and reporting checklist.
 5. A 12-paper coded literature audit showing which causes, authorities, attacker
    models, views, causal controls, and defenses prior work actually studies.
-6. An open deterministic reference harness and two illustrative workflows.
+6. An open, archived v0.1-scripted executable specification and two illustrative
+   workflows, explicitly separated from v0.2 live evidence.
 
 ## Recommended structure
 
@@ -63,4 +70,6 @@ The field should stop using one trace signature as a causal label. A robust safe
 claim requires an intervention history; a robust defense claim requires an
 observability contract; and a robust benchmark claim requires paired controls at
 the workflow level. The reference harness demonstrates that these requirements
-are implementable even if current models do not produce the hoped-for reversal.
+are implementable even if live agents do not produce the primary mechanism signal
+or the secondary defense interaction. A strict reversal is informative when it
+occurs, but the methods contribution does not depend on one.

@@ -4,7 +4,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from .enums import (
+    AgentDecisionKind,
     Architecture,
+    DecisionMode,
     DecisionValue,
     Defense,
     Mechanism,
@@ -22,6 +24,89 @@ class ActionSpec:
     name: str
     terminal: bool
     parameters: Json = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AgentDecision:
+    """A backend's typed decision, including non-semantic provider telemetry.
+
+    The trusted runner validates the payload for the selected kind. In particular,
+    an ``EXECUTE`` decision is not authority to run an arbitrary action: its action
+    must exactly match one of the runner-provided offered actions.
+    """
+
+    kind: AgentDecisionKind
+    action: ActionSpec | None = None
+    reason: str | None = None
+    missing_information: tuple[str, ...] = ()
+    raw_output: str | None = None
+    provider_metadata: Json = field(default_factory=dict)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: float = 0.0
+
+    @classmethod
+    def execute(
+        cls,
+        action: ActionSpec,
+        *,
+        raw_output: str | None = None,
+        provider_metadata: Json | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        latency_ms: float = 0.0,
+    ) -> AgentDecision:
+        return cls(
+            kind=AgentDecisionKind.EXECUTE,
+            action=action,
+            raw_output=raw_output,
+            provider_metadata=dict(provider_metadata or {}),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+        )
+
+    @classmethod
+    def refuse(
+        cls,
+        reason: str,
+        *,
+        raw_output: str | None = None,
+        provider_metadata: Json | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        latency_ms: float = 0.0,
+    ) -> AgentDecision:
+        return cls(
+            kind=AgentDecisionKind.REFUSE,
+            reason=reason,
+            raw_output=raw_output,
+            provider_metadata=dict(provider_metadata or {}),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+        )
+
+    @classmethod
+    def escalate(
+        cls,
+        missing_information: tuple[str, ...],
+        *,
+        raw_output: str | None = None,
+        provider_metadata: Json | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        latency_ms: float = 0.0,
+    ) -> AgentDecision:
+        return cls(
+            kind=AgentDecisionKind.ESCALATE,
+            missing_information=tuple(missing_information),
+            raw_output=raw_output,
+            provider_metadata=dict(provider_metadata or {}),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+        )
 
 
 @dataclass(frozen=True)
@@ -82,11 +167,13 @@ class StageContext:
     objective_view: str
     visible_facts: Json
     local_policy_id: str
+    local_policy_contract: str
     restriction_visible: bool
     restriction_text: str | None
     shareable_message: str
     public_evidence: Json
     applicable_policy_ids: tuple[str, ...]
+    applicable_policy_contracts: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -115,7 +202,10 @@ class StepTrace:
     agent_id: str
     role: Role
     local_policy_id: str
+    local_policy_contract: str
     applicable_policy_ids: tuple[str, ...]
+    applicable_policy_contracts: tuple[tuple[str, str], ...]
+    model_policy_view: Json
     facts_visible: Json
     objective_view: str
     restriction_visible: bool
@@ -123,6 +213,15 @@ class StepTrace:
     artifact_input: Json | None
     artifact_model_view: Json | None
     artifact_output: Json | None
+    candidate_action: Json
+    offered_actions: tuple[Json, ...]
+    decision_mode: DecisionMode
+    agent_decision: Json
+    selected_action: Json | None
+    executed_action: Json | None
+    provider_metadata: Json
+    # v0.1 compatibility fields. ``declared_action`` aliases the candidate and
+    # ``proposed_action`` aliases the selected action (or an empty object).
     declared_action: Json
     proposed_action: Json
     local_decision: Decision
@@ -131,11 +230,13 @@ class StepTrace:
     tool_result: ToolResult | None
     shareable_public_evidence: Json
     refusal: bool = False
+    escalation: bool = False
     capability_failure: bool = False
     token_usage: Json = field(default_factory=lambda: {"input": 0, "output": 0})
     latency_ms: float = 0.0
     raw_model_output: str | None = None
     proposal_status: str = "valid_proposal"
+    decision_status: str = "accepted_execute"
     tool_status: str | None = None
 
 
@@ -157,16 +258,20 @@ class RunTrace:
     intervention_coordinate: str
     transformation_diff_allowlist: tuple[str, ...]
     transformation_delta: tuple[str, ...]
+    model_visibility_map: Json
     defense: Defense
     safety_variant: SafetyVariant
     architecture: Architecture
+    decision_mode: DecisionMode
     backend: str
     model_id: str
     backend_configuration: Json
     provenance_key_id: str
+    batch_id: str
     seed: int
     invocation_id: str
     steps: list[StepTrace]
+    skipped_roles: tuple[Role, ...]
     final_environment_state: Json
     terminal_status: str
     status: RunStatus
@@ -177,6 +282,7 @@ class RunTrace:
     defense_overblocked: bool
     defense_blocked: bool
     refusal: bool
+    escalation: bool
     capability_failure: bool
     total_token_usage: Json
     total_latency_ms: float

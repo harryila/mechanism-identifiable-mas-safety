@@ -29,7 +29,7 @@
     "public_evidence_by_role"
   ],
   "properties": {
-    "schema_version": {"const": "0.1.0"},
+    "schema_version": {"const": "0.2.0"},
     "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
     "title": {"type": "string", "minLength": 1},
     "domain": {"type": "string", "minLength": 1},
@@ -143,10 +143,10 @@
       "additionalProperties": false,
       "required": ["planner", "retriever", "transformer", "actuator"],
       "properties": {
-        "planner": {"type": "array", "items": {"type": "string"}},
-        "retriever": {"type": "array", "items": {"type": "string"}},
-        "transformer": {"type": "array", "items": {"type": "string"}},
-        "actuator": {"type": "array", "items": {"type": "string"}}
+        "planner": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "retriever": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "transformer": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "actuator": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
       }
     },
     "roleObjectMap": {
@@ -183,7 +183,30 @@
         "policy_id": {"type": "string", "minLength": 1},
         "predicate": {"enum": ["objective_authorization_guard", "visible_invariant_guard", "restriction_guard", "global_invariant_guard", "allow_if_all"]},
         "parameters": {"type": "object"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"predicate": {"const": "allow_if_all"}}},
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["required_facts"],
+                "properties": {
+                  "required_facts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "uniqueItems": true
+                  }
+                }
+              }
+            }
+          },
+          "else": {"properties": {"parameters": {"maxProperties": 0}}}
+        }
+      ]
     }
   }
 }

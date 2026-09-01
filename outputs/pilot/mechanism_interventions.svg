@@ -30,7 +30,7 @@
 <line x1="442.5" y1="136" x2="442.5" y2="184" stroke="#64748b" stroke-dasharray="4 3"/>
 <rect x="375" y="184" width="155" height="76" rx="8" fill="#fef3c7" stroke="#94a3b8"/>
 <text class="mechanism" text-anchor="middle" x="452.5" y="210">Authorization drift</text>
-<text class="coordinate" text-anchor="middle" x="452.5" y="232">restriction_forwarded</text>
+<text class="coordinate" text-anchor="middle" x="452.5" y="232">authorization_information_forwarded</text>
 <text class="coordinate" text-anchor="middle" x="452.5" y="248">off → on at this coordinate</text>
 <line x1="612.5" y1="136" x2="612.5" y2="184" stroke="#64748b" stroke-dasharray="4 3"/>
 <rect x="545" y="184" width="155" height="76" rx="8" fill="#fce7f3" stroke="#94a3b8"/>

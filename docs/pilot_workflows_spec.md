@@ -1,9 +1,18 @@
-# Pilot workflow specifications
+# Archived v0.1-scripted pilot workflow specifications
+
+> **Archive notice:** this is an amended historical explanation of the
+> deterministic pilot and is not live-agent evidence. The exact v0.1 files are
+> preserved at the immutable
+> [`v0.1.0-scripted` tag](https://github.com/harryila/mechanism-identifiable-mas-safety/tree/v0.1.0-scripted).
+> The active prospective design is
+> [`protocols/v0.2-live.md`](../protocols/v0.2-live.md); v0.1 outputs are not
+> included in v0.2 empirical estimates.
 
 ## 1. Scope and source of truth
 
-This document describes the deterministic two-workflow pilot as it is currently
-executed. The machine-readable scenario files are authoritative:
+This document describes the deterministic two-workflow pilot lineage. The
+current machine-readable scenarios drive the v0.2 scripted preflight; use the
+tag above for the authoritative archived v0.1 versions:
 
 - [`scenarios/healthcare_patient_summary.json`](../scenarios/healthcare_patient_summary.json)
 - [`scenarios/finance_unapproved_payment.json`](../scenarios/finance_unapproved_payment.json)
@@ -99,7 +108,7 @@ Only the paths in the manifest allowlist change.
 | Policy heterogeneity | Scenario `source` policy except for the treated Actuator | Actuator uses only the source policy | Actuator uses the downstream policy locally and lists both source and downstream policies as applicable; facts remain complete | `workflow_stage` only |
 
 The intervention coordinates are, respectively, `objective_projection_mode`,
-`fact_routing_mode`, `restriction_forwarded`, and
+`fact_routing_mode`, `authorization_information_forwarded`, and
 `policy_assignment_by_role.actuator`.
 
 Only terminal actions invoke the mechanism-specific substantive policy branch;

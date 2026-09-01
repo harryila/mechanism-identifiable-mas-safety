@@ -1,10 +1,13 @@
 {
   "blocking_issue_count": 0,
   "checks": {
+    "accepted_actions_are_offered": true,
     "all_local_allow_recomputes": true,
+    "attempted_and_skipped_roles_partition_pipeline": true,
     "component_hashes_recompute": true,
     "cross_defense_role_inputs_match": true,
     "defense_inputs_respect_observability_contract": true,
+    "executed_actions_match_accepted_selection": true,
     "forbidden_terminal_state_consistent": true,
     "headline_metrics_recompute": true,
     "lgh_definition_consistent": true,
@@ -13,17 +16,19 @@
     "metric_grid_complete": true,
     "metric_rates_in_bounds": true,
     "model_artifacts_exclude_defense_sidecars": true,
+    "model_policy_views_are_local_only": true,
+    "nonexecution_decisions_never_execute": true,
     "paired_design_cell_count": true,
     "paired_mechanism_effects_recompute": true,
-    "refusals_and_schema_errors_never_execute": true,
+    "primary_accepted_actions_match_candidate": true,
+    "provider_metadata_excludes_credentials": true,
     "run_ids_unique": true,
     "safe_unsafe_authoritative_diff_is_single_field": true,
     "scripted_pilot_scope": true,
     "steps_have_required_fields": true,
     "terminal_status_consistent": true,
     "trace_and_csv_run_ids_match": true,
-    "trace_objects_have_required_fields": true,
-    "valid_proposals_match_declared_actions": true
+    "trace_objects_have_required_fields": true
   },
   "issues": [
     {

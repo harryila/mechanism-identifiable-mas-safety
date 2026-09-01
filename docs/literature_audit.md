@@ -86,6 +86,12 @@ This audit checks the eight arXiv references named in the project brief and adds
 
 The closest precedent for the proposed controlled comparison is *MasDrift*, because it holds tasks and tools fixed while changing coordination architecture and includes explicit authorization semantics. The proposed work can still contribute by separating four mechanisms under a common policy, workflow, trace contract, and intervention framework rather than treating all distributed failures as one class.
 
+Under v0.2-live, that separation is the primary empirical question: whether at
+least two distinct interventions yield the same LGH outcome in live agents. The
+mechanism-by-defense interaction is secondary. A strict defense rank reversal is
+a bonus, while pooled regret and model-family comparisons are exploratory; the
+literature audit does not justify promoting those analyses to primary claims.
+
 Three design constraints follow from this audit:
 
 1. Keep the authoritative policy executable and invariant across mechanisms. Provider refusal rates cannot substitute for local policy compliance.

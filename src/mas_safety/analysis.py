@@ -688,7 +688,12 @@ def write_mechanism_interventions_svg(path: str | Path) -> None:
     annotations = (
         ("Intent decomposition", "objective_projection_mode", 35, "#dbeafe"),
         ("Context fragmentation", "fact_routing_mode", 205, "#dcfce7"),
-        ("Authorization drift", "restriction_forwarded", 375, "#fef3c7"),
+        (
+            "Authorization drift",
+            "authorization_information_forwarded",
+            375,
+            "#fef3c7",
+        ),
         (
             "Policy heterogeneity",
             "policy_assignment_by_role.actuator",

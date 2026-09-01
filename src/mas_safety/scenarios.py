@@ -47,8 +47,7 @@ def load_scenario(path: str | Path) -> Scenario:
         Role(key): tuple(value) for key, value in raw["context_fragments"].items()
     }
     public_evidence = {
-        Role(key): dict(value)
-        for key, value in raw["public_evidence_by_role"].items()
+        Role(key): dict(value) for key, value in raw["public_evidence_by_role"].items()
     }
     return Scenario(
         schema_version=raw["schema_version"],
@@ -126,9 +125,10 @@ def _validate_raw(raw: dict[str, Any], path: Path) -> None:
             f"{path}: principals must be unique and include source_principal"
         )
     for edge in raw["authority_chain"]:
-        if edge.get("from_principal") not in principal_ids or edge.get(
-            "to_principal"
-        ) not in principal_ids:
+        if (
+            edge.get("from_principal") not in principal_ids
+            or edge.get("to_principal") not in principal_ids
+        ):
             raise ScenarioValidationError(
                 f"{path}: authority_chain refers to an unknown principal"
             )
@@ -148,22 +148,62 @@ def _validate_raw(raw: dict[str, Any], path: Path) -> None:
                 f"{path}: {key} roles must be {sorted(role_values)}, got {sorted(supplied)}"
             )
     actions = raw["actions"]
-    if [item.get("role") for item in actions] != [role.value for role in PIPELINE_ROLES]:
+    if [item.get("role") for item in actions] != [
+        role.value for role in PIPELINE_ROLES
+    ]:
         raise ScenarioValidationError(f"{path}: actions must follow the fixed pipeline")
-    if sum(bool(item.get("terminal")) for item in actions) != 1 or not actions[-1]["terminal"]:
-        raise ScenarioValidationError(f"{path}: only the actuator action may be terminal")
-    required_policies = {"intent", "context", "restriction", "source", "downstream", "single_agent"}
+    if (
+        sum(bool(item.get("terminal")) for item in actions) != 1
+        or not actions[-1]["terminal"]
+    ):
+        raise ScenarioValidationError(
+            f"{path}: only the actuator action may be terminal"
+        )
+    required_policies = {
+        "intent",
+        "context",
+        "restriction",
+        "source",
+        "downstream",
+        "single_agent",
+    }
     if set(raw["policies"]) != required_policies:
-        raise ScenarioValidationError(f"{path}: policies must be {sorted(required_policies)}")
+        raise ScenarioValidationError(
+            f"{path}: policies must be {sorted(required_policies)}"
+        )
+    policy_ids = [policy.get("policy_id") for policy in raw["policies"].values()]
+    if len(policy_ids) != len(set(policy_ids)):
+        raise ScenarioValidationError(f"{path}: policy_id values must be unique")
+    expected_predicates = {
+        "intent": "objective_authorization_guard",
+        "context": "visible_invariant_guard",
+        "restriction": "restriction_guard",
+        "source": "global_invariant_guard",
+        "downstream": "allow_if_all",
+        "single_agent": "global_invariant_guard",
+    }
+    wrong_predicates = {
+        name: policy.get("predicate")
+        for name, policy in raw["policies"].items()
+        if policy.get("predicate") != expected_predicates[name]
+    }
+    if wrong_predicates:
+        raise ScenarioValidationError(
+            f"{path}: policy roles use unsupported predicates {wrong_predicates}"
+        )
     invariant = raw["global_invariant"]
     invariant_keys: Iterable[str] = (
         invariant["trigger_fact"],
         invariant["authorization_fact"],
         *invariant.get("always_required_facts", []),
     )
-    missing_facts = sorted(key for key in invariant_keys if key not in raw["unsafe_facts"])
+    missing_facts = sorted(
+        key for key in invariant_keys if key not in raw["unsafe_facts"]
+    )
     if missing_facts:
-        raise ScenarioValidationError(f"{path}: invariant refers to missing facts {missing_facts}")
+        raise ScenarioValidationError(
+            f"{path}: invariant refers to missing facts {missing_facts}"
+        )
     non_boolean_policy_facts = sorted(
         key for key in invariant_keys if type(raw["unsafe_facts"][key]) is not bool
     )
@@ -171,17 +211,29 @@ def _validate_raw(raw: dict[str, Any], path: Path) -> None:
         raise ScenarioValidationError(
             f"{path}: invariant facts must be boolean {non_boolean_policy_facts}"
         )
-    unknown_overrides = sorted(set(raw["safe_fact_overrides"]) - set(raw["unsafe_facts"]))
+    unknown_overrides = sorted(
+        set(raw["safe_fact_overrides"]) - set(raw["unsafe_facts"])
+    )
     if unknown_overrides:
-        raise ScenarioValidationError(f"{path}: safe overrides introduce facts {unknown_overrides}")
+        raise ScenarioValidationError(
+            f"{path}: safe overrides introduce facts {unknown_overrides}"
+        )
     if set(raw["safe_fact_overrides"]) != {raw["permissibility_fact"]}:
         raise ScenarioValidationError(
             f"{path}: matched safe variant must change only permissibility_fact"
         )
     if raw["permissibility_fact"] not in raw["unsafe_facts"]:
-        raise ScenarioValidationError(f"{path}: permissibility_fact is not authoritative")
+        raise ScenarioValidationError(
+            f"{path}: permissibility_fact is not authoritative"
+        )
+    if raw["permissibility_fact"] != invariant["authorization_fact"]:
+        raise ScenarioValidationError(
+            f"{path}: permissibility_fact must be the invariant authorization_fact"
+        )
     if type(raw["safe_fact_overrides"][raw["permissibility_fact"]]) is not bool:
-        raise ScenarioValidationError(f"{path}: safe permissibility override must be boolean")
+        raise ScenarioValidationError(
+            f"{path}: safe permissibility override must be boolean"
+        )
     if invariant["terminal_action"] != actions[-1]["name"]:
         raise ScenarioValidationError(
             f"{path}: invariant terminal_action must match the actuator action"
@@ -193,9 +245,26 @@ def _validate_raw(raw: dict[str, Any], path: Path) -> None:
             raise ScenarioValidationError(
                 f"{path}: derived rule for {target} refers to missing fact {rule[1:]}"
             )
+    authorization_fact = invariant["authorization_fact"]
+    required_authorization_aliases = {"authorization_marker", "terminal_authorized"}
+    missing_aliases = sorted(
+        required_authorization_aliases - set(raw["derived_fact_rules"])
+    )
+    if missing_aliases:
+        raise ScenarioValidationError(
+            f"{path}: missing authorization-derived aliases {missing_aliases}"
+        )
+    for alias in required_authorization_aliases:
+        if raw["derived_fact_rules"][alias] != f"${authorization_fact}":
+            raise ScenarioValidationError(
+                f"{path}: {alias} must derive directly from authorization_fact"
+            )
     for policy_name, policy in raw["policies"].items():
         for key in policy.get("parameters", {}).get("required_facts", []):
-            if key not in raw["unsafe_facts"] or type(raw["unsafe_facts"][key]) is not bool:
+            if (
+                key not in raw["unsafe_facts"]
+                or type(raw["unsafe_facts"][key]) is not bool
+            ):
                 raise ScenarioValidationError(
                     f"{path}: policy {policy_name} requires non-boolean or missing fact {key}"
                 )
@@ -204,6 +273,49 @@ def _validate_raw(raw: dict[str, Any], path: Path) -> None:
         if unknown:
             raise ScenarioValidationError(
                 f"{path}: context fragment {role} refers to missing facts {unknown}"
+            )
+    decisive_facts = {
+        invariant["trigger_fact"],
+        invariant["authorization_fact"],
+        *invariant.get("always_required_facts", []),
+    }
+    routed_facts = [
+        key for role in PIPELINE_ROLES for key in raw["context_fragments"][role.value]
+    ]
+    unrelated_routed = sorted(set(routed_facts) - decisive_facts)
+    if unrelated_routed:
+        raise ScenarioValidationError(
+            f"{path}: context fragments may route only decisive facts {unrelated_routed}"
+        )
+    missing_routing = sorted(decisive_facts - set(routed_facts))
+    duplicate_routing = sorted(
+        key for key in decisive_facts if routed_facts.count(key) > 1
+    )
+    if missing_routing or duplicate_routing:
+        raise ScenarioValidationError(
+            f"{path}: decisive facts must be routed exactly once; "
+            f"missing={missing_routing}, non_unique={duplicate_routing}"
+        )
+    downstream_required = set(
+        raw["policies"]["downstream"].get("parameters", {}).get("required_facts", [])
+    )
+    if not downstream_required or authorization_fact in downstream_required:
+        raise ScenarioValidationError(
+            f"{path}: downstream heterogeneous policy must define a non-authorization rule"
+        )
+    known_evidence_facts = set(raw["unsafe_facts"]) | set(raw["derived_fact_rules"])
+    for role, evidence in raw["public_evidence_by_role"].items():
+        unknown_evidence = sorted(
+            value[1:]
+            for value in evidence.values()
+            if isinstance(value, str)
+            and value.startswith("$")
+            and value[1:] not in known_evidence_facts
+        )
+        if unknown_evidence:
+            raise ScenarioValidationError(
+                f"{path}: public evidence {role} refers to missing facts "
+                f"{unknown_evidence}"
             )
     missing_provenance = sorted(
         set(raw["provenance_claim_keys"]) - set(raw["unsafe_facts"])
