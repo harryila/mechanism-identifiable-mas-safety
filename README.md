@@ -18,6 +18,11 @@ multi-agent pipeline.
   result is in [`results/stage1-v0.2.1/`](results/stage1-v0.2.1/). The protocol
   and preregistration retain their pre-run status language intentionally as
   historical freeze records.
+- [`v0.2.2-stage2`](protocols/v0.2.2-stage2-replay-amendment.md) is a transparent
+  post-Stage 1, pre-defense-outcome amendment for the deterministic middleware
+  replay. The implementation and exact private-source commitments are frozen at
+  the `v0.2.2-stage2-freeze` tag before the one authorized replay. It changes no
+  Stage 1 outcome, gate, tag, or interpretation.
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a
@@ -47,6 +52,13 @@ untracked.
 Stage 1 is a two-workflow development micro-pilot, **not confirmatory evidence**.
 Defense calibration, sealed benchmark construction, and the Stage 4
 confirmatory run remain future work.
+
+The private Stage 1 archive is committed by a public, domain-separated SHA-256
+tree root and has two owner-read-only local copies. The commitment, preservation
+record, limitations, and verification commands are in
+[`preservation/stage1-v0.2.1/`](preservation/stage1-v0.2.1/). Both copies are on
+the same physical device as the source, so one still needs to be transferred to
+a separately controlled encrypted offline volume for disaster independence.
 
 The deterministic harness validates the executable scenario contract,
 single-variable interventions, defense visibility boundaries, controls, trace
@@ -127,12 +139,27 @@ The live protocol proceeds in four stages:
    `2 workflows x 4 mechanisms x 2 assignments x 2 safety variants x 3 repetitions x 2 models = 192`
    scheduled workflow runs, with at most 768 four-stage agent calls. See the
    [`reviewed result`](results/stage1-v0.2.1/README.md).
-2. **Defense calibration — planned:** apply frozen middleware defenses to the same raw live
-   execution decisions and separately evaluate the finite-action condition.
-3. **Sealed benchmark construction — planned:** author and seal 8–12 new workflows without
-   inspecting live outcomes on them.
+2. **Defense calibration — frozen replay:** apply the four realistic middleware
+   defenses once to all 192 frozen Stage 1 decision paths under the prospective
+   [`v0.2.2 amendment`](protocols/v0.2.2-stage2-replay-amendment.md). The replay
+   is intention-to-treat; proposal-conditioned results are separately labelled
+   coverage diagnostics. The finite-action condition remains a separate future
+   block.
+3. **Sealed benchmark construction — planned:** author and seal exactly eight new
+   workflows under the prospective
+   [`construction rubric`](docs/confirmatory_workflow_construction_rubric.md),
+   without using Stage 2 outcomes to select or tune them.
 4. **Freeze and confirmation — planned:** hash the final materials, model snapshots,
    budgets, gates, and analysis before executing the sealed study.
+
+Stage 2 is offline and makes zero model or provider calls. Its production command
+requires the exact public freeze tag, a clean worktree, the independently
+verified read-only Stage 1 archive copy, a committed non-development provenance
+key fingerprint, and a fresh one-shot authority. Its public derivative is
+limited to allowlisted run outcomes, aggregates, a replay manifest, and
+checksums. It is an exact deterministic middleware coverage and observability
+audit on frozen live-agent decision paths—not learned defense effectiveness,
+closed-loop adaptation, deployment prevalence, or confirmatory evidence.
 
 The primary condition asks each role to choose `execute`, `refuse`, or `escalate`
 for one declared typed action. A separate secondary condition asks the model to

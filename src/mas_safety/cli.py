@@ -6,13 +6,14 @@ import binascii
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 
 from .analysis import analyze_and_write
-from .live import run_live_development
 from .runner import ExperimentRunner, pilot_specs, write_traces
 from .scenarios import load_scenarios
 from .shadow import write_shadow_replay
+from .stage2_cli import Stage2CLIError, configure_stage2_parser
 from .validation import validate_output_dir
 
 
@@ -66,6 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
         "list-scenarios", help="List validated scenario identifiers."
     )
     list_parser.add_argument("--scenario-dir", type=Path)
+    configure_stage2_parser(subparsers)
     return parser
 
 
@@ -86,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
     if args.command == "run-live-development":
+        # Keep provider/OpenAI modules outside the import graph for every
+        # deterministic command, especially the offline Stage 2 replay.
+        from .live import run_live_development
+
         if len(args.model) != 2 or len(set(args.model)) != 2:
             raise SystemExit(
                 "run-live-development requires exactly two distinct --model values"
@@ -108,6 +114,39 @@ def main(argv: list[str] | None = None) -> int:
             provenance_signing_key=signing_key,
             provenance_key_id=key_id,
         )
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+    if args.command == "run-stage2-replay":
+        try:
+            report = args.stage2_executor(args)
+        except Stage2CLIError as exc:
+            # Stage2CLIError codes are deliberately redaction-safe. Never emit
+            # exception messages, causes, paths, key material, or subprocess text.
+            print(
+                json.dumps(
+                    {
+                        "error": exc.code,
+                        "schema_version": "stage2-cli-error-v1",
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            return 2
+        except Exception:  # noqa: BLE001 - redact the private replay boundary
+            # The production boundary must not turn an unexpected replay bug
+            # into a disclosure of private archive values through a traceback.
+            print(
+                json.dumps(
+                    {
+                        "error": "stage2_unexpected_failure",
+                        "schema_version": "stage2-cli-error-v1",
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            return 2
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
     if args.command == "validate":

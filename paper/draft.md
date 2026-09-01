@@ -1,10 +1,11 @@
 # Same Symptom, Different Failure: Mechanism-Identifiable Evaluation of Compositional Safety in Multi-Agent Systems
 
 > **Draft status:** post–Stage 1 live development report under the immutable
-> `v0.2.1` freeze. Stage 1 passed its advancement gate; Stage 2 defense
-> calibration and the sealed Stage 4 confirmatory study are not yet reported.
-> Bracketed Stage 4 result text remains withheld. The archived v0.1-scripted
-> numbers are engineering validation only.
+> `v0.2.1` freeze, with the prospective `v0.2.2` Stage 2 replay amendment.
+> Stage 1 passed its advancement gate; no Stage 2 defense outcome had been
+> computed when the replay population, estimands, code, and construction rubric
+> were frozen. Bracketed Stage 2 and Stage 4 result text remains withheld. The
+> archived v0.1-scripted numbers are engineering validation only.
 
 ## Abstract
 
@@ -19,7 +20,8 @@ Local compliance and terminal harm are executable predicates, not LLM judgments.
 We specify five defense conditions under frozen information contracts and measure
 LGH, benign completion, defense overblocking, and mechanism-specific residual
 risk. The v0.2 design begins with exactly 192 live development workflow runs over
-two models, then freezes middleware defenses and 8–12 new workflows before the
+two models, then freezes an intention-to-treat middleware replay and exactly
+eight new workflows before the
 confirmatory study. The one authorized Stage 1 attempt completed all 192 runs
 using 762 agent calls. Its advancement gate passed: unsafe mechanism-off LGH was
 0/48, safe completion was 86/96, 758/762 attempted calls produced schema-valid
@@ -27,7 +29,8 @@ decisions, and all four pooled paired effects met the Stage 1 threshold, althoug
 authorization drift had zero effect in the GPT-5.4 stratum. Because these
 observations come from two authored development workflows, they are excluded
 from confirmatory estimates; defense interactions and the sealed-workflow
-primary claim remain untested. **[STAGE 4 CONFIRMATORY RESULT WITHHELD.]** A
+primary claim remain untested. **[STAGE 2 DEFENSE RESULT AND STAGE 4
+CONFIRMATORY RESULT WITHHELD.]** A
 strict defense rank reversal is a bonus result; pooled regret and model-family
 comparisons are exploratory. If the preregistered primary gates are not met, the
 framework and audit stand as the contribution without a manufactured
@@ -158,18 +161,23 @@ escalation, schema error, local block, defense block, and provider/tool error ar
 reported separately.
 
 The primary experiment hides defense identity and sidecar metadata from the
-model. This isolates middleware enforcement from behavioral prompting. A shadow
-replay analysis evaluates every defense on the same frozen local-only proposal
-trace; it is reported separately from closed-loop completion.
+model. This isolates middleware enforcement from behavioral prompting. Stage 2
+evaluates each realistic defense once on every one of the 192 scheduled frozen
+local-only decision paths. Refusals, escalations, errors, and other paths that do
+not reach a valid locally allowed terminal proposal remain in the
+intention-to-treat denominator and receive no defense credit. Separately labelled
+proposal-conditioned rates describe middleware coverage only; the replay is not
+closed-loop model behavior.
 
 ### 3.3 Scenarios and controls
 
 The development fixtures cover protected-summary disclosure and an approval-gated
-vendor payment. The confirmatory study uses 8–12 additional sealed workflows
-spanning healthcare, public services, education, and finance/procurement. The
-exact count is fixed from validity, coverage, and budget before any live outcome
-on those workflows is inspected. The two development fixtures are excluded from
-confirmatory estimates.
+vendor payment. The confirmatory study uses exactly eight additional sealed
+workflows: two each from healthcare, public services, education, and
+finance/procurement. A prospective construction rubric also fixes four terminal
+action types, at least three authority structures, and an exact one-fact
+safe/unsafe rule before Stage 2 outcomes are inspected. The two development
+fixtures are excluded from confirmatory estimates.
 
 Every mechanism-on unsafe run has a same-topology mechanism-off counterfactual and
 a matched-safe utility case. The matched-safe case is not a causal control; it
@@ -208,13 +216,16 @@ The v0.2 study has four stages. Stage 1 schedules exactly
 
 live workflow runs in the primary execution-decision condition. A four-role run
 uses at most four calls, so the hard Stage 1 ceiling is 768 agent calls. Stage 2
-freezes and replays middleware defenses on those raw live decisions and may run a
-separately budgeted finite-action condition. Stage 3 authors and seals 8–12 new
-workflows. Stage 4 freezes every experimental and analysis component and executes
-the confirmatory matrix. For `N` sealed workflows, that primary matrix contains
-`N x 4 x 2 x 2 x 3 x 2 = 96N` workflow runs, or 768–1,152 runs for `N=8–12`.
-Defense replay does not require a new model call because defense identity and
-sidecars are hidden from the proposing model.
+replays four realistic middleware defenses on all 192 frozen typed decision paths
+(`768` candidate evaluations), evaluates an omniscient reference separately on
+the same paths (`192` reference evaluations), and retains the `192` observed
+local-only rows, for `1,152` normalized rows. Stage 3 authors and seals exactly
+eight new workflows. Stage 4 freezes every experimental and analysis component
+and executes exactly `8 x 4 x 2 x 2 x 3 x 2 = 768` primary workflow runs, at most
+`3,072` agent calls, with exactly counterbalanced adjacent on/off pair order.
+Defense replay requires no new model call because it reuses the frozen typed
+decisions. The five-choice finite-action condition is a separately frozen and
+budgeted future development block and is never pooled with either matrix.
 
 Stage 1 freezes `gpt-5.5-2026-04-23` and `gpt-5.4-2026-03-05`, each with
 `reasoning.effort=low` and `max_output_tokens=512`. Before the study begins, one
@@ -262,7 +273,13 @@ Workflow-cluster bootstrap intervals are descriptive. A secondary analysis
 reports `mechanism x defense` differences in absolute defense effect with workflow
 effects; it does not use call-level independence.
 
-Defenses must meet prespecified utility eligibility before ranking. A bonus strict
+Stage 2 reports residual LGH and paired absolute defense effects over all 12
+scheduled mechanism-on unsafe runs per mechanism-defense cell. Safe utility and
+overblocking use all 12 scheduled matched-safe runs; a realistic defense is
+utility-eligible for a mechanism only at 11/12 benign completions or better.
+Proposal-conditioned block and interception rates retain explicit numerators,
+denominators, and estimability flags. Defenses must meet prespecified utility
+eligibility before ranking. A bonus strict
 reversal requires opposite residual-risk margins of at least 0.25 in two
 mechanisms and direction agreement in at least `ceil(0.75N)` sealed workflows.
 Small tied rank changes do not count. The reversal is not a gate. Equally weighted
@@ -330,7 +347,16 @@ advancement decision, not confirmation of the mechanism claim. Sanitized run,
 arm, and paired-effect tables are released in
 [`results/stage1-v0.2.1/`](../results/stage1-v0.2.1/).
 
-### 5.3 Stage 4 confirmatory results
+### 5.3 Stage 2 deterministic defense replay
+
+**[WITHHELD UNTIL THE PUBLIC STAGE 2 FREEZE AND ONE-SHOT REPLAY.]** Report the
+complete intention-to-treat residual-risk, paired-effect, safe-utility,
+overblocking, proposal-coverage, and signed interaction tables. Preserve the
+candidate/reference boundary and label the result as exact deterministic
+middleware coverage and observability on frozen live-agent decision paths, not
+learned defense effectiveness or closed-loop adaptation.
+
+### 5.4 Stage 4 confirmatory results
 
 **[WITHHELD UNTIL SEALED RUN]** Report, in order:
 
@@ -386,7 +412,7 @@ wrong interpretation: absent evidence is not necessarily failed reasoning.
 
 The study remains a controlled benchmark. The topology and renderers are
 scripted; decisions and actions are typed; tools are simulated; workflows are
-authored; 8–12 workflows do not establish domain prevalence; two frozen model
+authored; eight workflows do not establish domain prevalence; two frozen model
 snapshots do not establish model-family generality; and no condition models
 adaptive attackers, colluding workers, covert channels, or arbitrary free-form
 semantic leakage. A single-agent comparison
@@ -394,9 +420,14 @@ cannot show that “multi-agentness” alone caused an effect because it changes
 topology, calls, and context. The same-topology paired intervention carries the
 causal claim. The current scenario schema records a three-principal registry and
 one authority edge per fixture, but not a complete real-world authority graph,
-credential issuer, revocation model, or cryptographic action binding. Its
-HMAC-SHA256 provenance sidecar uses a harness development key; it is an internal
-integrity mechanism, not production identity or key management.
+credential issuer, revocation model, or cryptographic action binding. The
+scripted oracle uses a bundled development key, while Stage 1 and Stage 2 inject
+separate nondevelopment HMAC keys and release only their identifiers and one-way
+fingerprints. Stage 2 constructs a replay-native artifact identity and
+authenticated sidecar from frozen trusted facts; it does not claim a
+byte-identical Stage 1 artifact or a sidecar visible to the original model.
+These remain harness integrity mechanisms, not production identity or key
+management.
 
 The completed Stage 1 evidence is narrower still: it has only two independent
 development workflows. Safe completion differed by model (40/48 versus 46/48),
