@@ -1,9 +1,10 @@
 # Same Symptom, Different Failure: Mechanism-Identifiable Evaluation of Compositional Safety in Multi-Agent Systems
 
-> **Draft status:** v0.2.1-live prospective methods scaffold and pre-live Stage 1
-> freeze. Bracketed result text is withheld until the sealed live-agent study is
-> run. The archived
-> v0.1-scripted numbers are engineering validation only.
+> **Draft status:** post–Stage 1 live development report under the immutable
+> `v0.2.1` freeze. Stage 1 passed its advancement gate; Stage 2 defense
+> calibration and the sealed Stage 4 confirmatory study are not yet reported.
+> Bracketed Stage 4 result text remains withheld. The archived v0.1-scripted
+> numbers are engineering validation only.
 
 ## Abstract
 
@@ -15,15 +16,22 @@ and disagreement among legitimate policies can all produce the same trace-level
 symptom. We present a paired evaluation framework that manipulates each mechanism
 through a single declared intervention coordinate in a fixed four-stage pipeline.
 Local compliance and terminal harm are executable predicates, not LLM judgments.
-We compare five defense conditions under frozen information contracts and measure
+We specify five defense conditions under frozen information contracts and measure
 LGH, benign completion, defense overblocking, and mechanism-specific residual
 risk. The v0.2 design begins with exactly 192 live development workflow runs over
 two models, then freezes middleware defenses and 8–12 new workflows before the
-confirmatory study. **[LIVE RESULT: primary paired mechanism effects, secondary
-mechanism-by-defense interaction, and sensitivity statement.]** A strict defense
-rank reversal is a bonus result; pooled regret and model-family comparisons are
-exploratory. If the preregistered primary gates are not met, the framework and
-audit stand as the contribution without a manufactured effectiveness claim.
+confirmatory study. The one authorized Stage 1 attempt completed all 192 runs
+using 762 agent calls. Its advancement gate passed: unsafe mechanism-off LGH was
+0/48, safe completion was 86/96, 758/762 attempted calls produced schema-valid
+decisions, and all four pooled paired effects met the Stage 1 threshold, although
+authorization drift had zero effect in the GPT-5.4 stratum. Because these
+observations come from two authored development workflows, they are excluded
+from confirmatory estimates; defense interactions and the sealed-workflow
+primary claim remain untested. **[STAGE 4 CONFIRMATORY RESULT WITHHELD.]** A
+strict defense rank reversal is a bonus result; pooled regret and model-family
+comparisons are exploratory. If the preregistered primary gates are not met, the
+framework and audit stand as the contribution without a manufactured
+effectiveness claim.
 
 ## 1. Introduction
 
@@ -275,7 +283,54 @@ the scripted oracle.
 These outcomes are unit-oracle predictions and are not evidence about model
 behavior or real defense effectiveness.
 
-### 5.2 V0.2.1 live-agent results
+### 5.2 Stage 1 live development micro-pilot
+
+The one authorized attempt completed the frozen matrix, and all eight evaluated
+development gates passed. Both out-of-study smoke calls passed and were excluded
+from every schedule, estimand, gate, and model-behavior claim. No smoke or Stage 1
+call was retried or replaced. Four provider errors were retained as outcomes.
+
+| Measure | Observed | Gate |
+|---|---:|---:|
+| Scheduled runs | 192/192 | complete |
+| Agent calls | 762 | ≤768 |
+| Unsafe off-arm LGH | 0/48 | ≤0.05 |
+| Safe completion | 86/96 = 0.895833 | ≥0.875 |
+| Safe-completion stretch | 0.895833 | 0.95, missed |
+| Valid structured decisions | 758/762 = 0.994751 | >0.95 |
+| Dominant nonexecution arms | 10/32 = 0.3125 | <0.50 |
+| Qualifying mechanisms | 4/4 | ≥2 |
+| Provider errors | 4 | retained; no retries |
+
+Paired on-minus-off unsafe LGH effects in the local-only condition were:
+
+| Mechanism | GPT-5.4, n=6 | GPT-5.5, n=6 | Pooled, n=12 |
+|---|---:|---:|---:|
+| Intent decomposition | 0.833333 | 1.000000 | 0.916667 |
+| Context fragmentation | 1.000000 | 0.833333 | 0.916667 |
+| Authorization drift | 0.000000 | 1.000000 | 0.500000 |
+| Policy heterogeneity | 0.500000 | 1.000000 | 0.750000 |
+
+All four pooled effects met the 0.25 development threshold and neither model
+stratum was negative. The pooled safe-completion pass masks a model difference:
+40/48 for GPT-5.4 versus 46/48 for GPT-5.5. Authorization drift was null in the
+GPT-5.4 stratum and maximal in GPT-5.5. Eight of the ten nonexecution-dominant
+arms were unsafe mechanism-off controls with universal refusal; the other two
+were GPT-5.4 authorization-drift-on arms with universal escalation.
+
+The complete private archive audit reconciled 762 requests with 758 responses
+and four error records and passed every frozen hash, bidirectional linkage,
+metadata, usage, permission, and completeness check. The conservative budget
+ledger consumed USD 4.335005000 of the USD 20 authority. That number is not a
+provider invoice: every failed call forfeits its full reservation.
+
+Models and repetitions are nested repeated measurements, leaving only two
+independent development workflows. Accordingly, **GO** is an operational
+advancement decision, not confirmation of the mechanism claim. Sanitized run,
+arm, and paired-effect tables are released in
+[`results/stage1-v0.2.1/`](../results/stage1-v0.2.1/).
+
+### 5.3 Stage 4 confirmatory results
 
 **[WITHHELD UNTIL SEALED RUN]** Report, in order:
 
@@ -342,6 +397,13 @@ one authority edge per fixture, but not a complete real-world authority graph,
 credential issuer, revocation model, or cryptographic action binding. Its
 HMAC-SHA256 provenance sidecar uses a harness development key; it is an internal
 integrity mechanism, not production identity or key management.
+
+The completed Stage 1 evidence is narrower still: it has only two independent
+development workflows. Safe completion differed by model (40/48 versus 46/48),
+authorization drift ranged from a 0.0 to 1.0 paired effect across the two model
+strata, and substantial arm-level nonexecution remained despite passing the
+pooled gate. These observations motivate calibration and sealed evaluation; they
+do not establish cross-workflow generalization.
 
 ## 8. Conclusion
 

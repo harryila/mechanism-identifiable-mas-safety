@@ -1,7 +1,7 @@
 # Same Symptom, Different Failure
 
-This repository is a controlled research harness and prospective live-agent
-protocol for testing whether the same **local-allow/global-harm (LGH)** trace
+This repository is a controlled research harness and staged live-agent protocol
+for testing whether the same **local-allow/global-harm (LGH)** trace
 signature can arise through different causal mechanisms in a four-stage
 multi-agent pipeline.
 
@@ -11,15 +11,42 @@ multi-agent pipeline.
   [`v0.1.0-scripted` tag](https://github.com/harryila/mechanism-identifiable-mas-safety/tree/v0.1.0-scripted).
   It is a deterministic executable specification and test oracle, **not empirical
   model evidence**.
-- [`v0.2.1-live`](protocols/v0.2-live.md) is the active prospective research
-  protocol and pre-live Stage 1 freeze. No live provider outcomes have been
-  collected under it.
+- [`v0.2.1-live`](protocols/v0.2-live.md) is the immutable prospective Stage 1
+  protocol frozen at the
+  [`v0.2.1` tag](https://github.com/harryila/mechanism-identifiable-mas-safety/tree/v0.2.1).
+  Its one authorized live development run is complete; the reviewed public
+  result is in [`results/stage1-v0.2.1/`](results/stage1-v0.2.1/). The protocol
+  and preregistration retain their pre-run status language intentionally as
+  historical freeze records.
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a
 mechanism-by-defense interaction under frozen defense information contracts. A
 strict defense rank reversal is a bonus result, not a success gate. Pooled
 rankings, maximum regret, and model-family differences are exploratory.
+
+## Stage 1 development result
+
+The exact frozen matrix completed all 192 scheduled workflow runs using
+`gpt-5.5-2026-04-23` and `gpt-5.4-2026-03-05`. All eight development gates
+passed and the decision was **GO**: mechanism-off unsafe LGH was 0/48,
+matched-safe completion was 86/96, 758/762 attempted decisions were structured,
+and all four mechanisms met the pooled paired-effect rule. Safe completion
+passed the 0.875 gate but missed the 0.95 stretch target; authorization drift
+also differed materially by model (0.0 versus 1.0 paired effect). Four provider
+errors were retained with no retries.
+
+The conservative hard-budget ledger consumed USD 4.335005000 of the authorized
+USD 20 ceiling. This is a reservation-based authority measure, not necessarily
+the provider invoice. Exact gate values, sanitized per-run outcomes, arm tables,
+paired effects, checksums, and the release boundary are in the
+[`Stage 1 result`](results/stage1-v0.2.1/README.md). Raw prompts, model prose,
+provider request/response identifiers, and private audit records remain
+untracked.
+
+Stage 1 is a two-workflow development micro-pilot, **not confirmatory evidence**.
+Defense calibration, sealed benchmark construction, and the Stage 4
+confirmatory run remain future work.
 
 The deterministic harness validates the executable scenario contract,
 single-variable interventions, defense visibility boundaries, controls, trace
@@ -92,18 +119,19 @@ The executed analysis companion is
 with `uv run --frozen --extra notebook python scripts/build_notebook.py
 --execute` after regenerating outputs.
 
-## Active v0.2.1 live study
+## v0.2.1 live study
 
 The live protocol proceeds in four stages:
 
-1. **Live feasibility:** exactly
+1. **Live feasibility — completed:** exactly
    `2 workflows x 4 mechanisms x 2 assignments x 2 safety variants x 3 repetitions x 2 models = 192`
-   scheduled workflow runs, with at most 768 four-stage agent calls.
-2. **Defense calibration:** apply frozen middleware defenses to the same raw live
+   scheduled workflow runs, with at most 768 four-stage agent calls. See the
+   [`reviewed result`](results/stage1-v0.2.1/README.md).
+2. **Defense calibration — planned:** apply frozen middleware defenses to the same raw live
    execution decisions and separately evaluate the finite-action condition.
-3. **Sealed benchmark construction:** author and seal 8–12 new workflows without
+3. **Sealed benchmark construction — planned:** author and seal 8–12 new workflows without
    inspecting live outcomes on them.
-4. **Freeze and confirmation:** hash the final materials, model snapshots,
+4. **Freeze and confirmation — planned:** hash the final materials, model snapshots,
    budgets, gates, and analysis before executing the sealed study.
 
 The primary condition asks each role to choose `execute`, `refuse`, or `escalate`
@@ -142,8 +170,8 @@ The v0.2 execution-decision and finite-action interface must pass its frozen
 offline and provider-adapter tests before the first protocol call. The existence
 of an adapter is not evidence that a live stage has been run.
 
-Install the exact `openai==3.6.0` live adapter and hard-QA dependencies, then run
-the frozen Stage 1 matrix with the two exact snapshot IDs:
+The historical frozen invocation used the exact `openai==3.6.0` live adapter,
+hard-QA dependencies, and two exact snapshot IDs:
 
 ```bash
 uv sync --frozen --extra dev --extra live-openai
@@ -153,6 +181,10 @@ uv run --frozen --extra dev --extra live-openai python -m mas_safety run-live-de
   --model gpt-5.4-2026-03-05 \
   --output outputs/private/live-development-YYYYMMDD
 ```
+
+The v0.2.1 one-shot authority has been consumed. Do not rerun this command under
+the frozen commit; any later paid attempt requires a new prospective protocol
+commit and new operator authorization.
 
 Set `OPENAI_API_KEY` through the process environment or a secret manager before
 running the command; never place it in a command argument, fixture, tracked file,

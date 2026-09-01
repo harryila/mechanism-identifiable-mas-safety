@@ -1,2 +1,6 @@
 * text=auto eol=lf
 *.csv text eol=crlf
+results/stage1-v0.2.1/*.csv text eol=lf
+results/stage1-v0.2.1/*.json text eol=lf
+results/stage1-v0.2.1/*.md text eol=lf
+results/stage1-v0.2.1/SHA256SUMS text eol=lf

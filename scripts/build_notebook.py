@@ -27,7 +27,8 @@ def build_notebook() -> nbformat.NotebookNode:
             "mechanism-on/off core cells plus 32 architecture/reference cells. The "
             "harness checks pass and the scripted oracle exhibits the preregistered "
             "mechanism-specific profiles. The empirical decision remains "
-            "`not_evaluable_scripted_backend`; a live-model pilot is required."
+            "`not_evaluable_scripted_backend`; the separately reported live Stage 1 "
+            "result is not inferred from this artifact."
         ),
         new_markdown(
             "## Context & Methods\n\n"
@@ -103,9 +104,9 @@ def build_notebook() -> nbformat.NotebookNode:
             "references are internally consistent in the deterministic harness.\n"
             "2. The unit oracle creates multiple mechanism-specific defense profiles, "
             "so the ranking and heatmap code exercise the intended analysis path.\n"
-            "3. No model was sampled. The next evidentiary step is a sealed live-model "
-            "run on the two development workflows, followed by eight held-out workflows "
-            "only if the preregistered gates pass."
+            "3. No model was sampled in this notebook. Live Stage 1 has since completed "
+            "under the immutable v0.2.1 freeze and is reported separately; defense "
+            "calibration and sealed-workflow construction are the next stages."
         ),
     ]
     for index, cell in enumerate(cells):

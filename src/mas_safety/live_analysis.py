@@ -922,7 +922,7 @@ def _report_markdown(report: dict[str, object]) -> str:
                 )
             ),
             (
-                "- Gross provider cost ledger: USD "
+                "- Conservative provider authority consumed: USD "
                 + str(
                     report.get("operator_budget_audit", {}).get(
                         "committed_usd", "not audited"
