@@ -1,0 +1,33 @@
+{
+  "algorithm": "sha256-rfc6962-domain-separated-tree-v1",
+  "archive_scope": {
+    "entries": "all descendant directories and regular files",
+    "exclusions": [],
+    "metadata_committed": [
+      "entry_type",
+      "relative_posix_utf8_path",
+      "regular_file_size",
+      "regular_file_sha256"
+    ],
+    "metadata_excluded": [
+      "mode",
+      "uid",
+      "gid",
+      "mtime",
+      "ctime",
+      "xattrs"
+    ],
+    "multiply_linked_regular_files": "rejected",
+    "special_files": "rejected",
+    "symbolic_links": "rejected"
+  },
+  "directory_count": 6,
+  "merkle_root_sha256": "1d22d2c571abb161470715b503a603e577314d60987348da775c09929ac52f51",
+  "privacy": {
+    "filenames_disclosed": false,
+    "per_file_digests_disclosed": false,
+    "per_file_sizes_disclosed": false
+  },
+  "regular_file_count": 1537,
+  "schema_version": "mas-private-archive-commitment-v1"
+}

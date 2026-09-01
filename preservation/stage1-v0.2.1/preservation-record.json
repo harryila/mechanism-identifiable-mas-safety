@@ -1,0 +1,20 @@
+{
+  "commitment_created_utc": "2026-09-01T09:12:19Z",
+  "commitment_file": "archive-commitment.json",
+  "commitment_semantics": "Commits to the private archive bytes and relative layout as observed at commitment time; it does not independently prove provider origin, run-time existence, completeness before commitment, or semantic validity.",
+  "local_copy_receipts": {
+    "copy_count": 2,
+    "read_only_verified": true,
+    "same_device_as_source": true,
+    "warning": "The two verified local copies are not independent disaster-recovery copies because all three snapshots are on the same physical storage device. Transfer at least one copy to a separately controlled encrypted offline volume."
+  },
+  "merkle_root_sha256": "1d22d2c571abb161470715b503a603e577314d60987348da775c09929ac52f51",
+  "schema_version": "mas-private-archive-preservation-record-v1",
+  "source_anchors": {
+    "pre_run_freeze_commit": "3b1fc156dc4a7104937bd6284b67d1cc5c93ee8c",
+    "pre_run_freeze_tag": "v0.2.1",
+    "public_results_commit": "3555acd12958ae6275b755539918bca7e63308e7",
+    "public_results_tag": "v0.2.1-stage1-results",
+    "stage1_trace_sha256": "a6879cb457429b6afd120ebe563aa98530ea3b7e94caf2080b368a7979640d67"
+  }
+}
