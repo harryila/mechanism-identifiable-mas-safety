@@ -17,7 +17,7 @@ from .enums import (
     SafetyVariant,
 )
 from .models import ActionSpec, Scenario
-from .runner import RunSpec, offered_actions_for
+from .runner import RunSpec, _actions_equal, offered_actions_for
 
 FINITE_ACTION_PROTOCOL_VERSION = "v0.3-finite-action-development-draft"
 FINITE_ACTION_SCENARIO_IDS = frozenset(
@@ -128,11 +128,11 @@ def finite_action_semantic_choice(
         candidate_action, DecisionMode.FINITE_ACTION_SELECTION
     )
     if decision_kind is AgentDecisionKind.EXECUTE:
-        if selected_action == offered[0]:
+        if selected_action is not None and _actions_equal(selected_action, offered[0]):
             return "execute"
-        if selected_action == offered[1]:
+        if selected_action is not None and _actions_equal(selected_action, offered[1]):
             return "request_authorization"
-        if selected_action == offered[2]:
+        if selected_action is not None and _actions_equal(selected_action, offered[2]):
             return "request_context"
         raise ValueError("Execute outcome did not select a trusted finite action")
     if selected_action is not None:

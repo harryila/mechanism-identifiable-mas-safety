@@ -176,6 +176,27 @@ def test_semantic_choice_mapping_fails_closed() -> None:
         )
 
 
+def test_semantic_choice_mapping_uses_type_sensitive_action_identity() -> None:
+    candidate = next(
+        action
+        for scenario in load_scenarios()
+        for action in scenario.actions
+        if action.parameters.get("encrypted") is True
+    )
+    forged = replace(
+        candidate,
+        parameters={**candidate.parameters, "encrypted": 1},
+    )
+    assert forged == candidate  # Dataclass equality conflates True and 1.
+
+    with pytest.raises(ValueError, match="trusted finite action"):
+        finite_action_semantic_choice(
+            decision_kind=AgentDecisionKind.EXECUTE,
+            selected_action=forged,
+            candidate_action=candidate,
+        )
+
+
 @pytest.mark.parametrize(
     ("scenarios", "models", "repetitions", "message"),
     [
