@@ -1,0 +1,66 @@
+name: Tests and public release verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      PYTHONHASHSEED: "0"
+      UV_NO_PROGRESS: "1"
+      UV_PYTHON_DOWNLOADS: never
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.11"
+          check-latest: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.7.20"
+          enable-cache: false
+
+      - name: Install frozen test dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Run frozen test suite
+        run: >-
+          env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_CUSTOM_HEADERS
+          uv run --frozen --no-sync pytest
+
+      - name: Verify Stage 1 public release
+        run: >-
+          env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_CUSTOM_HEADERS
+          uv run --frozen --no-sync python scripts/verify_stage1_release.py
+
+      - name: Verify Stage 2 public release
+        run: >-
+          env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_CUSTOM_HEADERS
+          uv run --frozen --no-sync python scripts/verify_stage2_release.py
+
+      - name: Verify sealed Stage 3 construction
+        run: >-
+          env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_CUSTOM_HEADERS
+          uv run --frozen --no-sync python
+          verification/stage3-confirmatory/verify_construction.py
+
+      - name: Verify Stage 3 detached seal
+        run: sha256sum --check verification/stage3-confirmatory/selection_seal.sha256
