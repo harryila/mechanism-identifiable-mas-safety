@@ -1,0 +1,18 @@
+{
+  "binding_version": "stage3-confirmatory-repository-binding-v1",
+  "bound_at": "2026-09-01T17:52:27-07:00",
+  "sealed_commit_sha": "3fec886a9fdd1fbcde66f7732f972ec51c33823e",
+  "sealed_commit_committed_at": "2026-09-01T17:52:09-07:00",
+  "annotated_tag": "stage3-construction-seal-2026-09-01",
+  "annotated_tag_object_sha": "425cf58f9ba8d0b4774e3c5bf33b0475d0589e4e",
+  "annotated_tag_created_at": "2026-09-01T17:52:27-07:00",
+  "selection_seal_file_sha256": "10a707d982a0bc5f647d671b4a135dbff9b792640b117376e47abb90cbb7d297",
+  "selection_record_sha256": "06b412b406bda88b687c0a676f09fc60424efa71b1f5d4d5531e7bb0b08643ed",
+  "construction_verifier_sha256": "6e18a915a57cfaf5e1b615f2889c05e9091e742ba46241a5da5b2d5460a1fba8",
+  "stage4_observability_projector_sha256": "fae7b872538288c85cd383f19c3383680e997c792295f820a3d59cccaa785293",
+  "ordered_workflow_manifest_sha256": "172cb6ce368f3ba819407f02e5b31ae33e0755ea49f0decc291756e2c632b3b3",
+  "sealed_entry_count": 11,
+  "post_seal_provenance_note": "verification/stage3-confirmatory/post_seal_provenance_note.md",
+  "post_seal_provenance_note_sha256": "26f77731a3002664383880b1ba39890ada7379376cd230ec0938ec14f8ec0fad",
+  "statement": "The annotated tag binds the outcome-blind R4 content seal to the exact repository commit. This separate record was necessarily written after that commit and does not alter any sealed byte."
+}

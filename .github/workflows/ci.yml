@@ -25,6 +25,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -64,3 +65,9 @@ jobs:
 
       - name: Verify Stage 3 detached seal
         run: sha256sum --check verification/stage3-confirmatory/selection_seal.sha256
+
+      - name: Verify Stage 3 repository binding
+        run: >-
+          env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_CUSTOM_HEADERS
+          uv run --frozen --no-sync python
+          scripts/verify_stage3_repository_binding.py
