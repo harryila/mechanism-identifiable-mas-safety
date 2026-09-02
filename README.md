@@ -26,6 +26,24 @@ multi-agent pipeline.
   public derivative is in
   [`results/stage2-v0.2.2/`](results/stage2-v0.2.2/). It changes no Stage 1
   outcome, gate, tag, or interpretation.
+- The outcome-blind Stage 3 construction package now contains exactly eight
+  independently authored confirmatory workflows. Its
+  [`selection record`](verification/stage3-confirmatory/selection_record.json),
+  [`detached seal`](verification/stage3-confirmatory/selection_seal.sha256), and
+  [`offline construction verifier`](verification/stage3-confirmatory/verify_construction.py)
+  establish construction validity and the blindness boundary, not a live result.
+  The repository commit containing the unchanged content seal is preserved by
+  the [`stage3-construction-seal-2026-09-01` tag](https://github.com/harryila/mechanism-identifiable-mas-safety/tree/stage3-construction-seal-2026-09-01).
+  The separate [`repository binding`](verification/stage3-confirmatory/repository_binding.json)
+  verifies that tag and commit, while the
+  [`post-seal provenance note`](verification/stage3-confirmatory/post_seal_provenance_note.md)
+  records an informational exposure that occurred only after the sealed bytes
+  were final and left them unchanged.
+- Stage 4 currently has only an offline, provider-free schedule and analysis
+  implementation. The exact execution freeze, models, parameters, budget,
+  one-shot authority, private output location, and fresh credential boundary are
+  still required before a `run-stage4-confirmatory` command may exist. See the
+  [`execution status`](docs/stage4_execution_status.md).
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a
@@ -53,8 +71,9 @@ provider request/response identifiers, and private audit records remain
 untracked.
 
 Stage 1 is a two-workflow development micro-pilot, **not confirmatory evidence**.
-The finite-action block, sealed benchmark construction, and Stage 4
-confirmatory run remain future work.
+The outcome-blind benchmark construction is now sealed, and a separate
+finite-action inclusion-rule draft plus offline Stage 4 schedule/analysis code
+now exist. No Stage 4 or finite-action model call has been authorized or made.
 
 ## Stage 2 deterministic replay result
 
@@ -84,6 +103,15 @@ preregistered strict-reversal bonus remains untested because its sealed-workflow
 criterion has not been evaluated. Exact effects, proposal coverage, interactions,
 limitations, checksums, and the audit record are in the
 [`Stage 2 result`](results/stage2-v0.2.2/README.md).
+
+An additive post-release implementation audit found that the legacy
+policy-intersection evaluator could read `objective_view` for intent
+decomposition and `restriction_visible` for authorization drift even though its
+serialized view contained only policy IDs and gate-visible facts. The released
+rows remain exact outputs of the frozen program, but those policy-intersection
+cells do not establish the narrower declared capability boundary. Stage 1 and
+the other Stage 2 defenses are unaffected. See the
+[`observability note`](docs/stage2_policy_intersection_observability_note.md).
 
 The private Stage 1 archive is committed by a public, domain-separated SHA-256
 tree root and has two owner-read-only local copies. The commitment, preservation
@@ -118,6 +146,17 @@ uv run --frozen --extra dev python -m mas_safety run-pilot --output outputs/pilo
 uv run --frozen --extra dev python -m mas_safety validate --input outputs/pilot
 uv run --frozen --extra dev pytest
 uv run --frozen --extra notebook python scripts/build_notebook.py --execute
+```
+
+The public releases and the sealed Stage 3 construction package can be checked
+without credentials or provider access:
+
+```bash
+uv run --frozen --extra dev python scripts/verify_stage1_release.py
+uv run --frozen --extra dev python scripts/verify_stage2_release.py
+uv run --frozen --extra dev python verification/stage3-confirmatory/verify_construction.py
+shasum -a 256 -c verification/stage3-confirmatory/selection_seal.sha256
+uv run --frozen --extra dev python scripts/verify_stage3_repository_binding.py
 ```
 
 The pilot command writes:
@@ -177,17 +216,22 @@ The live protocol proceeds in four stages:
    [`v0.2.2 amendment`](protocols/v0.2.2-stage2-replay-amendment.md). The replay
    is intention-to-treat; proposal-conditioned results are separately labelled
    coverage diagnostics. See the
-   [`audited result`](results/stage2-v0.2.2/README.md). The finite-action
-   condition remains a separate future block.
-3. **Sealed benchmark construction — planned:** author and seal exactly eight new
-   workflows under the prospective
+   [`audited result`](results/stage2-v0.2.2/README.md). Finite-action execution
+   remains a separate future block under its own prospective
+   [`development draft`](protocols/v0.3-finite-action-development.md).
+3. **Sealed benchmark construction — completed:** an outcome-blind independent
+   constructor authored and selected exactly eight new workflows under the
+   prospective
    [`construction rubric`](docs/confirmatory_workflow_construction_rubric.md).
-   Because Stage 2 outcomes are now known before the workflow packages were
-   sealed, an outcome-blind independent author or reviewer must control final
-   workflow selection and record the access boundary; no Stage 2 result may be
-   used to choose, tune, retain, or remove a workflow.
-4. **Freeze and confirmation — planned:** hash the final materials, model snapshots,
-   budgets, gates, and analysis before executing the sealed study.
+   The constructor controlled final inclusion without access to Stage 1/2
+   outcomes, sealed all eight packages by content hash, and recorded the exact
+   access boundary. Construction QA passed; this is not a live result.
+4. **Freeze and confirmation — implementation only:** the provider-free schedule
+   builder fixes the 768-run, 384-adjacent-pair matrix and the analysis gives
+   workflows equal weight while nesting models and repetitions. A later
+   prospective freeze must still bind the exact prompts, schemas, model
+   snapshots, parameters, schedule hash, error rules, budget, authority, private
+   preservation, release verifier, and success/failure gates before any call.
 
 Stage 2 is offline and makes zero model or provider calls. Its production command
 requires the exact public freeze tag, a clean worktree, the independently
