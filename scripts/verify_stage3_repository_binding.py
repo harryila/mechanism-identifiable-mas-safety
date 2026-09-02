@@ -129,6 +129,11 @@ def _require(condition: bool, code: str) -> None:
         raise BindingVerificationError(code)
 
 
+def _require_current_bytes(path: Path, expected: bytes, *, label: str) -> None:
+    _require(path.is_file(), f"current_{label}_missing")
+    _require(path.read_bytes() == expected, f"current_{label}_drift")
+
+
 def _parse_seal(value: bytes) -> dict[str, str]:
     try:
         lines = value.decode("utf-8").splitlines()
@@ -203,6 +208,11 @@ def verify_repository_binding(path: Path = DEFAULT_BINDING) -> dict[str, Any]:
     seal_path = "verification/stage3-confirmatory/selection_seal.sha256"
     seal_bytes = _git_bytes(commit, seal_path)
     _require(_sha256(seal_bytes) == binding["selection_seal_file_sha256"], "selection_seal_hash_mismatch")
+    _require_current_bytes(
+        ROOT / seal_path,
+        seal_bytes,
+        label="selection_seal",
+    )
     entries = _parse_seal(seal_bytes)
     for sealed_path, expected_digest in entries.items():
         committed = _git_bytes(commit, sealed_path)

@@ -43,3 +43,20 @@ def test_stage3_repository_binding_rejects_provenance_note_hash_tamper(
         match="post_seal_provenance_note_hash_mismatch",
     ):
         MODULE.verify_repository_binding(tampered)
+
+
+def test_stage3_repository_binding_rejects_current_seal_byte_drift(
+    tmp_path: Path,
+) -> None:
+    current = tmp_path / "selection_seal.sha256"
+    current.write_bytes(b"tagged seal bytes\nextra unbound entry\n")
+
+    with pytest.raises(
+        MODULE.BindingVerificationError,
+        match="current_selection_seal_drift",
+    ):
+        MODULE._require_current_bytes(
+            current,
+            b"tagged seal bytes\n",
+            label="selection_seal",
+        )
