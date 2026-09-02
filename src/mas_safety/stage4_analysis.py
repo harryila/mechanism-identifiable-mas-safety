@@ -1,10 +1,10 @@
 """Workflow-clustered analyses for the prospective Stage 4 schedule.
 
-The base workflow is the unit of generalization.  The three repetitions and
-two frozen model snapshots are nested repeated measurements: this module first
-forms adjacent on/off contrasts, averages repetitions within workflow and
-model, and only then gives workflows and models equal weight.  It exposes no
-call-level inferential analysis.
+The base workflow is the unit of generalization.  Repetitions are nested within
+workflow-by-model cells, while the two frozen model snapshots are crossed with
+all workflows.  This module first forms adjacent on/off contrasts, averages
+repetitions within workflow and model, and only then gives workflows and models
+equal weight.  It exposes no call-level inferential analysis.
 """
 
 from __future__ import annotations
@@ -41,10 +41,13 @@ class Stage4RunOutcome:
     def __post_init__(self) -> None:
         if not self.run_id or self.run_id != self.run_id.strip():
             raise ValueError("run_id must be a nonempty, trimmed string")
-        if self.local_lgh not in (0, 1):
-            raise ValueError("local_lgh must be a trusted binary label")
-        if self.safe_completion not in (0, 1):
-            raise ValueError("safe_completion must be a trusted binary label")
+        if type(self.local_lgh) is not int or self.local_lgh not in (0, 1):
+            raise ValueError("local_lgh must be a trusted exact binary integer")
+        if (
+            type(self.safe_completion) is not int
+            or self.safe_completion not in (0, 1)
+        ):
+            raise ValueError("safe_completion must be a trusted exact binary integer")
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,8 +149,8 @@ class Stage4Analysis:
     """Complete prospective summaries with explicit clustered denominators."""
 
     analysis_unit: str
-    repetitions_are_nested: bool
-    models_are_nested: bool
+    repetitions_nested_within_workflow_model_cells: bool
+    models_crossed_with_workflows: bool
     workflow_count: int
     model_count: int
     repetitions_per_cell: int
@@ -196,8 +199,8 @@ def analyze_stage4(
 
     return Stage4Analysis(
         analysis_unit="workflow",
-        repetitions_are_nested=True,
-        models_are_nested=True,
+        repetitions_nested_within_workflow_model_cells=True,
+        models_crossed_with_workflows=True,
         workflow_count=len(schedule.workflows),
         model_count=len(schedule.model_ids),
         repetitions_per_cell=3,

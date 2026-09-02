@@ -39,10 +39,14 @@ multi-agent pipeline.
   [`post-seal provenance note`](verification/stage3-confirmatory/post_seal_provenance_note.md)
   records an informational exposure that occurred only after the sealed bytes
   were final and left them unchanged.
-- Stage 4 currently has only an offline, provider-free schedule and analysis
-  implementation. The exact execution freeze, models, parameters, budget,
-  one-shot authority, private output location, and fresh credential boundary are
-  still required before a `run-stage4-confirmatory` command may exist. See the
+- Stage 4 now has a provider-free v0.4 implementation candidate: a prospective
+  protocol, exact 768-row schedule, offline 3,072-request commitment corpus,
+  dormant one-shot executor, trace-to-label conversion, frozen decision rule,
+  read-only preflight CLI, constrained finalizer, private-archive-to-public
+  release builder, and independent future-release verifier. The candidate is
+  deliberately `draft_unexecutable`: its budget, fresh credential/provenance identities,
+  private-storage attestations, one-shot authority, final commit, and annotated
+  tag are unresolved. See the
   [`execution status`](docs/stage4_execution_status.md).
 
 The v0.2 primary claim is whether at least two causally distinct interventions
@@ -72,7 +76,7 @@ untracked.
 
 Stage 1 is a two-workflow development micro-pilot, **not confirmatory evidence**.
 The outcome-blind benchmark construction is now sealed, and a separate
-finite-action inclusion-rule draft plus offline Stage 4 schedule/analysis code
+finite-action inclusion-rule draft plus the unexecutable v0.4 Stage 4 candidate
 now exist. No Stage 4 or finite-action model call has been authorized or made.
 
 ## Stage 2 deterministic replay result
@@ -157,7 +161,49 @@ uv run --frozen --extra dev python scripts/verify_stage2_release.py
 uv run --frozen --extra dev python verification/stage3-confirmatory/verify_construction.py
 shasum -a 256 -c verification/stage3-confirmatory/selection_seal.sha256
 uv run --frozen --extra dev python scripts/verify_stage3_repository_binding.py
+uv run --frozen --extra dev python scripts/build_stage4_freeze.py --check
+uv run --frozen --extra dev python -I scripts/verify_stage4_release.py --allow-not-run
 ```
+
+After a complete authorized execution only,
+`scripts/build_stage4_release.py` validates the hash-committed private archive
+and its operator-supplied storage attestations, then atomically publishes the
+four-file sanitized public release. It fails closed on
+the current `NOT_RUN` draft. Its canonical, non-overridable invocation from the
+clean frozen repository root is:
+
+```bash
+/absolute/path/outside/repository/stage4-clean/bin/python -I scripts/build_stage4_release.py
+```
+
+The provider-free Stage 4 preflight is intentionally expected to fail closed
+while the checked-in manifest is a draft with unresolved authority:
+
+```bash
+uv run --frozen --extra dev python -m mas_safety run-stage4-confirmatory --preflight-only
+```
+
+After finalization, production execution requires a fresh dedicated virtual
+environment outside the repository, with a non-editable wheel installation of
+the exact frozen source. The current project `.venv` is editable and is
+deliberately rejected. From the clean frozen repository root, the only
+supported execution form is:
+
+```bash
+/absolute/path/outside/repository/stage4-clean/bin/python -I -B -m mas_safety run-stage4-confirmatory --execute
+```
+
+The executor requires isolated mode with bytecode-cache writes disabled, rejects
+Python startup/import overrides and any project `__pycache__`/`.pyc`/`.pyo`,
+requires all effective import paths and loaded project modules to remain under
+the clean interpreter's trusted install roots, and byte-matches the installed
+project source files to the frozen repository before reading Stage 4 secrets.
+This is defense in depth, not an independent proof of the bytecode already
+executed while Python entered `-m`: inspect and provision the clean, cache-free
+wheel environment before secrets are injected, and keep it trusted until the
+run. Python can process trusted-site `.pth`/`sitecustomize` files during startup.
+The command remains unusable until the finalization, tag, storage, credential,
+and budget blockers are resolved.
 
 The pilot command writes:
 
@@ -226,12 +272,21 @@ The live protocol proceeds in four stages:
    The constructor controlled final inclusion without access to Stage 1/2
    outcomes, sealed all eight packages by content hash, and recorded the exact
    access boundary. Construction QA passed; this is not a live result.
-4. **Freeze and confirmation — implementation only:** the provider-free schedule
-   builder fixes the 768-run, 384-adjacent-pair matrix and the analysis gives
-   workflows equal weight while nesting models and repetitions. A later
-   prospective freeze must still bind the exact prompts, schemas, model
-   snapshots, parameters, schedule hash, error rules, budget, authority, private
-   preservation, release verifier, and success/failure gates before any call.
+4. **Freeze and confirmation — unexecutable implementation candidate:** the
+   v0.4 protocol and candidate manifest bind the 768-run, 384-adjacent-pair
+   matrix, exact snapshots/request interface, prompt renderer and offline request
+   commitments, failure rules, workflow-weighted gates, redaction contract, and
+   independent verifier. The all-execute maximum-path cost bound is USD
+   79.657830000; completion-safe gross authority requires at least USD
+   257.023620000 because usage-unavailable transport failures forfeit a full
+   reservation while later scheduled rows continue. A new ceiling, fresh
+   credential/provenance identities, encrypted private preservation, one-shot
+   authority, final commit, and annotated tag remain mandatory before any call.
+   The USD 257.023620000 figure is local call-admission/ledger authority
+   conditional on the frozen provider model, tier, list price, and usage
+   contract; it neither proves nor caps provider-side billing. A returned
+   contract mismatch aborts and locally forfeits the requested-model reservation
+   without establishing the provider's billing. No Stage 4 call is authorized.
 
 Stage 2 is offline and makes zero model or provider calls. Its production command
 requires the exact public freeze tag, a clean worktree, the independently
@@ -350,7 +405,7 @@ separate outcomes, and run the predeclared controls. Credentials and authorizati
 headers must never enter prompts, backend configuration, or traces. The scripted
 pilot's expected defense profile is a unit test of the harness and must not be
 reported as a discovered result. No confirmatory empirical claim is made until
-the sealed v0.2 Stage 4 run and audit are complete.
+the prospectively frozen v0.4 Stage 4 run and audit are complete.
 
 The CLI enforces a batch-specific child of `outputs/private/` for any output
 inside this repository and refuses a nonempty destination. Do not commit raw

@@ -71,3 +71,25 @@ jobs:
           env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_CUSTOM_HEADERS
           uv run --frozen --no-sync python
           scripts/verify_stage3_repository_binding.py
+
+      - name: Verify Stage 4 freeze closure
+        run: >-
+          env -u MAS_SAFETY_STAGE4_API_KEY
+          -u MAS_SAFETY_STAGE4_PROVENANCE_KEY_B64
+          -u MAS_SAFETY_STAGE4_PROVENANCE_KEY_ID
+          -u OPENAI_API_KEY -u OPENAI_ADMIN_KEY -u OPENAI_BASE_URL
+          -u OPENAI_CUSTOM_HEADERS -u OPENAI_ORG_ID -u OPENAI_PROJECT
+          -u OPENAI_PROJECT_ID -u OPENAI_WEBHOOK_SECRET
+          uv run --frozen --no-sync python
+          scripts/build_stage4_freeze.py --check
+
+      - name: Verify Stage 4 public release status
+        run: >-
+          env -u MAS_SAFETY_STAGE4_API_KEY
+          -u MAS_SAFETY_STAGE4_PROVENANCE_KEY_B64
+          -u MAS_SAFETY_STAGE4_PROVENANCE_KEY_ID
+          -u OPENAI_API_KEY -u OPENAI_ADMIN_KEY -u OPENAI_BASE_URL
+          -u OPENAI_CUSTOM_HEADERS -u OPENAI_ORG_ID -u OPENAI_PROJECT
+          -u OPENAI_PROJECT_ID -u OPENAI_WEBHOOK_SECRET
+          uv run --frozen --no-sync python -I
+          scripts/verify_stage4_release.py --allow-not-run

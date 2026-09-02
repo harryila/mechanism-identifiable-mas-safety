@@ -68,7 +68,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_parser.add_argument("--scenario-dir", type=Path)
     configure_stage2_parser(subparsers)
+    stage4_parser = subparsers.add_parser(
+        "run-stage4-confirmatory",
+        help="Preflight or explicitly execute the frozen Stage 4 batch.",
+    )
+    stage4_mode = stage4_parser.add_mutually_exclusive_group(required=True)
+    stage4_mode.add_argument("--preflight-only", action="store_true")
+    stage4_mode.add_argument("--execute", action="store_true")
+    stage4_parser.set_defaults(stage4_executor=_execute_stage4_lazy)
     return parser
+
+
+def _execute_stage4_lazy(args: argparse.Namespace) -> dict[str, object]:
+    """Load Stage 4 only after its explicit subcommand has been selected."""
+
+    from .stage4_runtime import execute_stage4_command
+
+    return execute_stage4_command(args)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -149,6 +165,27 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
+    if args.command == "run-stage4-confirmatory":
+        try:
+            report = args.stage4_executor(args)
+        except Exception as exc:  # noqa: BLE001 - redact execution boundary
+            error_code = getattr(exc, "code", None)
+            if not isinstance(error_code, str):
+                error_code = "stage4_unexpected_preflight_failure"
+            print(
+                json.dumps(
+                    {
+                        "error": error_code,
+                        "schema_version": "stage4-confirmatory-preflight-error-v1",
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            return 2
+        destination = sys.stdout if report.get("pass") is True else sys.stderr
+        print(json.dumps(report, indent=2, sort_keys=True), file=destination)
+        return 0 if report.get("pass") is True else 2
     if args.command == "validate":
         report = validate_output_dir(args.input)
         print(json.dumps(report, indent=2, sort_keys=True))

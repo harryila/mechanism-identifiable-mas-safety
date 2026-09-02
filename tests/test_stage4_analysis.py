@@ -67,8 +67,8 @@ def test_analysis_uses_workflow_clustered_equal_weighting(schedule) -> None:
     analysis = analyze_stage4(schedule, _synthetic_outcomes(schedule))
 
     assert analysis.analysis_unit == "workflow"
-    assert analysis.repetitions_are_nested is True
-    assert analysis.models_are_nested is True
+    assert analysis.repetitions_nested_within_workflow_model_cells is True
+    assert analysis.models_crossed_with_workflows is True
     assert analysis.workflow_count == 8
     assert analysis.model_count == 2
     assert analysis.repetitions_per_cell == 3

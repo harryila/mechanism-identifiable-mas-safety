@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+import os
 import stat
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -145,7 +149,18 @@ def _backend(tmp_path: Path, decision: str = "execute") -> tuple[OpenAIResponses
     return backend, client
 
 
-@pytest.mark.parametrize("variable", ["OPENAI_BASE_URL", "OPENAI_CUSTOM_HEADERS"])
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "OPENAI_ADMIN_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_CUSTOM_HEADERS",
+        "OPENAI_ORG_ID",
+        "OPENAI_PROJECT",
+        "OPENAI_PROJECT_ID",
+        "OPENAI_WEBHOOK_SECRET",
+    ],
+)
 def test_live_backend_rejects_ambient_transport_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variable: str
 ) -> None:
@@ -189,6 +204,169 @@ def test_default_live_backend_rejects_sdk_version_drift(
     assert backend.configuration["http_follow_redirects"] is False
     assert backend.configuration["http_trust_env"] is False
     backend._client.close()
+
+
+def test_default_live_backend_rejects_repository_openai_shadow_before_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shadow_root = tmp_path / "shadow"
+    shadow_root.mkdir()
+    execution_marker = shadow_root / "imported.txt"
+    (shadow_root / "openai.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(execution_marker)!r}).write_text('executed')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(shadow_root))
+    monkeypatch.delitem(sys.modules, "openai", raising=False)
+    importlib.invalidate_caches()
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_CUSTOM_HEADERS", raising=False)
+
+    with pytest.raises(RuntimeError, match="shadows a trusted provider dependency"):
+        OpenAIResponsesBackend(
+            model_id="test-model-2026-08-01",
+            raw_log_dir=tmp_path / "raw-shadow-rejected",
+            api_key="synthetic-test-placeholder",
+        )
+
+    assert execution_marker.exists() is False
+
+
+@pytest.mark.parametrize("shadow_kind", ["fake_distribution", "transitive_httpx"])
+def test_default_live_backend_rejects_fresh_process_sdk_shadows(
+    tmp_path: Path,
+    shadow_kind: str,
+) -> None:
+    shadow_root = tmp_path / shadow_kind
+    shadow_root.mkdir()
+    execution_marker = shadow_root / "imported.txt"
+    marker_statement = (
+        "from pathlib import Path\n"
+        f"Path({str(execution_marker)!r}).write_text('executed')\n"
+    )
+    if shadow_kind == "fake_distribution":
+        package = shadow_root / "openai"
+        package.mkdir()
+        (package / "__init__.py").write_text(marker_statement, encoding="utf-8")
+        metadata = shadow_root / "openai-3.6.0.dist-info"
+        metadata.mkdir()
+        (metadata / "METADATA").write_text(
+            "Metadata-Version: 2.1\nName: openai\nVersion: 3.6.0\n",
+            encoding="utf-8",
+        )
+        (metadata / "RECORD").write_text(
+            "openai/__init__.py,,\n",
+            encoding="utf-8",
+        )
+    else:
+        # The pinned OpenAI 3.6.0 distribution imports the separately named
+        # ``httpx2`` package as its transport dependency.
+        (shadow_root / "httpx2.py").write_text(marker_statement, encoding="utf-8")
+
+    probe = "\n".join(
+        (
+            "from pathlib import Path",
+            "from mas_safety.live_backends import OpenAIResponsesBackend",
+            "try:",
+            "    OpenAIResponsesBackend(",
+            "        model_id='test-model-2026-08-01',",
+            "        raw_log_dir=Path('raw'),",
+            "        api_key='synthetic-test-placeholder',",
+            "    )",
+            "except RuntimeError:",
+            "    pass",
+            "else:",
+            "    raise AssertionError('shadow was not rejected')",
+        )
+    )
+    environment = dict(os.environ)
+    environment.pop("OPENAI_BASE_URL", None)
+    environment.pop("OPENAI_CUSTOM_HEADERS", None)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        (str(shadow_root), str(Path(__file__).resolve().parents[1] / "src"))
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=shadow_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert execution_marker.exists() is False
+
+
+def test_provider_call_keeps_repository_paths_out_of_lazy_imports(
+    tmp_path: Path,
+) -> None:
+    shadow_root = tmp_path / "lazy-import"
+    shadow_root.mkdir()
+    execution_marker = shadow_root / "imported.txt"
+    (shadow_root / "provider_lazy_attack.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(execution_marker)!r}).write_text('executed')\n",
+        encoding="utf-8",
+    )
+    probe = "\n".join(
+        (
+            "from pathlib import Path",
+            "from mas_safety.enums import DecisionMode",
+            "from mas_safety.live import _smoke_fixture",
+            "from mas_safety.live_backends import OpenAIResponsesBackend, ProviderCallError",
+            "class Responses:",
+            "    @staticmethod",
+            "    def create(**request):",
+            "        import provider_lazy_attack",
+            "class Client:",
+            "    responses = Responses()",
+            "backend = OpenAIResponsesBackend(",
+            "    model_id='test-model-2026-08-01',",
+            "    raw_log_dir=Path('raw'),",
+            "    api_key='synthetic-test-placeholder',",
+            "    budget_phase='stage_4_confirmatory',",
+            ")",
+            "official_client = backend._client",
+            "backend._client = Client()",
+            "context, action = _smoke_fixture('n' * 24)",
+            "try:",
+            "    backend.decide(",
+            "        context=context,",
+            "        decision_mode=DecisionMode.EXECUTION_DECISION,",
+            "        candidate_action=action,",
+            "        offered_actions=(action,),",
+            "        artifact=None,",
+            "        seed=1,",
+            "    )",
+            "except ProviderCallError:",
+            "    pass",
+            "else:",
+            "    raise AssertionError('lazy shadow import unexpectedly succeeded')",
+            "finally:",
+            "    official_client.close()",
+        )
+    )
+    environment = dict(os.environ)
+    environment.pop("OPENAI_BASE_URL", None)
+    environment.pop("OPENAI_CUSTOM_HEADERS", None)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        (str(shadow_root), str(Path(__file__).resolve().parents[1] / "src"))
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=shadow_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert execution_marker.exists() is False
 
 
 def test_live_backend_uses_strict_schema_and_maps_offered_action(
@@ -355,7 +533,8 @@ def test_budgeted_backend_aborts_on_frozen_response_contract_drift(
 
     assert raised.value.abort_live_batch is True
     assert raised.value.provider_metadata["failure_type"] == "provider_contract"
-    assert ledger.snapshot()["reservations_settled"] == 1
+    assert ledger.snapshot()["reservations_settled"] == 0
+    assert ledger.snapshot()["reservations_forfeited"] == 1
     assert ledger.snapshot()["active_reservations"] == 0
     response_record = json.loads(
         next((tmp_path / "raw").glob("*.response.json")).read_text()

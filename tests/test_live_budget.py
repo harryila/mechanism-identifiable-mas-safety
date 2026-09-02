@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import ClassVar
@@ -205,6 +206,58 @@ def test_budget_audit_rejects_a_truncated_settlement_suffix(tmp_path: Path) -> N
 
     assert truncated["pass"] is False
     assert truncated["active_reservations"] == 1
+
+
+def test_budget_audit_rejects_rehashed_settlement_above_output_token_bound(
+    tmp_path: Path,
+) -> None:
+    model_id = FROZEN_MODEL_IDS[0]
+    ledger = LiveBudgetLedger(tmp_path / "output-overbound.jsonl")
+    reservation = ledger.reserve(
+        phase="stage_4_confirmatory",
+        model_id=model_id,
+        call_stem="call-000001-output-overbound",
+        request_sha256="f" * 64,
+        request_utf8_bytes=100,
+    )
+    ledger.settle(reservation, input_tokens=0, output_tokens=1)
+    events = [
+        json.loads(line)
+        for line in ledger.path.read_text(encoding="utf-8").splitlines()
+    ]
+    terminal = events[-1]
+    settled = estimate_standard_cost_nano_usd(
+        model_id,
+        input_tokens=0,
+        output_tokens=FROZEN_OUTPUT_RESERVATION_TOKENS + 1,
+    )
+    terminal.update(
+        {
+            "output_tokens": FROZEN_OUTPUT_RESERVATION_TOKENS + 1,
+            "settled_nano_usd": settled,
+            "released_nano_usd": reservation.reserved_nano_usd - settled,
+            "committed_nano_usd": settled,
+            "held_nano_usd": 0,
+            "gross_exposure_nano_usd": settled,
+            "remaining_authority_nano_usd": (
+                ledger.snapshot()["hard_gross_ceiling_nano_usd"] - settled
+            ),
+        }
+    )
+    unhashed = {key: value for key, value in terminal.items() if key != "event_sha256"}
+    terminal["event_sha256"] = hashlib.sha256(
+        json.dumps(unhashed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    ledger.path.write_text(
+        "".join(json.dumps(event, sort_keys=True) + "\n" for event in events),
+        encoding="utf-8",
+    )
+
+    audit = audit_budget_ledger(ledger.path)
+
+    assert audit["pass"] is False
+    assert audit["checks"]["hash_chain_valid"] is True
+    assert audit["checks"]["event_state_replays"] is False
 
 
 def test_provider_authority_lock_is_one_shot_per_protocol_commit(

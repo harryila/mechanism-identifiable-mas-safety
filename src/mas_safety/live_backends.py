@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.machinery
 import importlib.metadata
+import importlib.util
+import inspect
 import json
 import os
+import sys
+import sysconfig
 import time
+import zipimport
 from collections.abc import Mapping
+from contextlib import contextmanager
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +23,7 @@ from .enums import AgentDecisionKind, DecisionMode
 from .live_budget import (
     BudgetAccountingError,
     BudgetReservation,
+    LiveBudgetError,
     LiveBudgetLedger,
 )
 from .models import ActionSpec, AgentDecision, Artifact, StageContext
@@ -28,8 +37,13 @@ FROZEN_MAX_OUTPUT_TOKENS = 512
 FROZEN_SERVICE_TIER = "default"
 
 _FORBIDDEN_OPENAI_TRANSPORT_ENV_VARS = (
+    "OPENAI_ADMIN_KEY",
     "OPENAI_BASE_URL",
     "OPENAI_CUSTOM_HEADERS",
+    "OPENAI_ORG_ID",
+    "OPENAI_PROJECT",
+    "OPENAI_PROJECT_ID",
+    "OPENAI_WEBHOOK_SECRET",
 )
 
 DECISION_JSON_SCHEMA: dict[str, object] = {
@@ -145,16 +159,40 @@ class ProviderCallError(TracedBackendError):
     """Raised for a transport failure or a non-completed provider response."""
 
 
+class ProviderAccessError(ProviderCallError):
+    """A fatal credential/snapshot-access failure for the frozen batch."""
+
+    abort_live_batch = True
+
+
+class ProviderArchiveError(TracedBackendError):
+    """A fatal private-record failure; provider evidence may be incomplete."""
+
+    abort_live_batch = True
+
+
 class ProviderContractError(TracedBackendError):
     """Raised when a response violates the frozen billing/model contract."""
 
     abort_live_batch = True
 
 
-def _reject_ambient_openai_transport_overrides() -> None:
-    present = [
-        name for name in _FORBIDDEN_OPENAI_TRANSPORT_ENV_VARS if name in os.environ
-    ]
+class ProviderImportBoundaryError(RuntimeError):
+    """A fatal loss of the trusted provider SDK import boundary."""
+
+    abort_live_batch = True
+
+
+def _reject_ambient_openai_transport_overrides(*, stage4: bool = False) -> None:
+    present = sorted(
+        {
+            name
+            for name in os.environ
+            if name in _FORBIDDEN_OPENAI_TRANSPORT_ENV_VARS
+            or stage4
+            and name.startswith("OPENAI_")
+        }
+    )
     if present:
         names = ", ".join(present)
         raise RuntimeError(
@@ -168,8 +206,9 @@ class OpenAIResponsesBackend(AgentBackend):
 
     The backend is intentionally fail-closed: it uses a strict JSON schema, performs
     an additional local semantic check, and maps action identifiers back to the
-    trusted runtime's immutable offered-action set. API credentials are acquired by
-    the SDK and never accepted, serialized, or exposed by this class.
+    trusted runtime's immutable offered-action set.  Stage 1 can retain the SDK's
+    historical environment lookup, while later frozen stages may inject an explicit
+    key.  Key material is never copied into configuration or raw records.
     """
 
     name = "openai_responses"
@@ -179,6 +218,7 @@ class OpenAIResponsesBackend(AgentBackend):
         *,
         model_id: str,
         raw_log_dir: Path,
+        api_key: str | None = None,
         client: object | None = None,
         max_output_tokens: int = FROZEN_MAX_OUTPUT_TOKENS,
         timeout_seconds: float = 120.0,
@@ -201,10 +241,19 @@ class OpenAIResponsesBackend(AgentBackend):
         if budget_phase not in {
             "pre_stage_1_smoke",
             "stage_1_live_feasibility",
+            "stage_4_confirmatory",
         }:
             raise ValueError("Unknown live-budget phase")
+        if api_key is not None and (
+            type(api_key) is not str or not api_key or api_key != api_key.strip()
+        ):
+            raise ValueError("api_key must be a nonempty, trimmed string when supplied")
+        if api_key is not None and client is not None:
+            raise ValueError("api_key and an injected client are mutually exclusive")
         if client is None:
-            _reject_ambient_openai_transport_overrides()
+            _reject_ambient_openai_transport_overrides(
+                stage4=budget_phase == "stage_4_confirmatory"
+            )
 
         self.model_id = model_id
         self.raw_log_dir = Path(raw_log_dir)
@@ -219,35 +268,38 @@ class OpenAIResponsesBackend(AgentBackend):
             pass
 
         if client is None:
-            try:
-                from openai import DefaultHttpxClient, OpenAI
-            except ImportError as exc:  # pragma: no cover - dependency integration
-                raise RuntimeError(
-                    "The live OpenAI backend requires the 'live-openai' extra."
-                ) from exc
-            installed_sdk_version = _installed_sdk_version()
-            if installed_sdk_version != PINNED_OPENAI_SDK_VERSION:
-                raise RuntimeError(
-                    "The live backend requires the frozen OpenAI SDK version "
-                    f"{PINNED_OPENAI_SDK_VERSION}; found {installed_sdk_version}"
+            with _verified_openai_sdk_import() as (
+                DefaultHttpxClient,
+                OpenAI,
+                trusted_import_roots,
+                trusted_import_entries,
+            ):
+                installed_sdk_version = _installed_sdk_version()
+                if installed_sdk_version != PINNED_OPENAI_SDK_VERSION:
+                    raise RuntimeError(
+                        "The live backend requires the frozen OpenAI SDK version "
+                        f"{PINNED_OPENAI_SDK_VERSION}; found {installed_sdk_version}"
+                    )
+                http_client = DefaultHttpxClient(
+                    follow_redirects=False,
+                    trust_env=False,
                 )
-            http_client = DefaultHttpxClient(
-                follow_redirects=False,
-                trust_env=False,
-            )
-            try:
-                client = OpenAI(
-                    max_retries=0,
-                    base_url=OPENAI_OFFICIAL_BASE_URL,
-                    default_headers={},
-                    http_client=http_client,
-                )
-            except BaseException:
-                http_client.close()
-                raise
+                try:
+                    client = OpenAI(
+                        api_key=api_key,
+                        max_retries=0,
+                        base_url=OPENAI_OFFICIAL_BASE_URL,
+                        default_headers={},
+                        http_client=http_client,
+                    )
+                except BaseException:
+                    http_client.close()
+                    raise
             sdk_version = installed_sdk_version
         else:
             sdk_version = sdk_version or "injected-client"
+            trusted_import_roots = None
+            trusted_import_entries = None
 
         self._client = client
         self._max_output_tokens = max_output_tokens
@@ -256,6 +308,8 @@ class OpenAIResponsesBackend(AgentBackend):
         self._sdk_version = sdk_version
         self._budget_ledger = budget_ledger
         self._budget_phase = budget_phase
+        self._trusted_import_roots = trusted_import_roots
+        self._trusted_import_entries = trusted_import_entries
         self._run_metadata: dict[str, object] = {}
         self.configuration: dict[str, object] = {
             "provider": "openai",
@@ -309,6 +363,22 @@ class OpenAIResponsesBackend(AgentBackend):
         artifact: Artifact | None,
         seed: int,
     ) -> AgentDecision:
+        if self._budget_phase == "stage_4_confirmatory" and any(
+            name.startswith("OPENAI_") for name in os.environ
+        ):
+            raise ProviderImportBoundaryError(
+                "Refusing ambient OpenAI configuration at the Stage 4 call boundary"
+            )
+        if (
+            self._budget_phase == "stage_4_confirmatory"
+            and self._trusted_import_roots is not None
+            and self._trusted_import_entries is not None
+        ):
+            _reject_untrusted_import_collisions(
+                list(sys.path),
+                trusted_roots=self._trusted_import_roots,
+                trusted_entries=list(self._trusted_import_entries),
+            )
         provider_request, prompt = build_frozen_provider_request(
             model_id=self.model_id,
             context=context,
@@ -320,23 +390,28 @@ class OpenAIResponsesBackend(AgentBackend):
         )
         action_catalog = _action_catalog(offered_actions)
         prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-        canonical_request = json.dumps(
-            provider_request, sort_keys=True, separators=(",", ":")
-        )
-        provider_request_sha256 = hashlib.sha256(
-            canonical_request.encode("utf-8")
-        ).hexdigest()
+        canonical_request = _canonical_json_bytes(provider_request)
+        provider_request_sha256 = hashlib.sha256(canonical_request).hexdigest()
 
         call_stem = self._next_call_stem(provider_request)
         reservation: BudgetReservation | None = None
         if self._budget_ledger is not None:
-            reservation = self._budget_ledger.reserve(
-                phase=self._budget_phase,
-                model_id=self.model_id,
-                call_stem=call_stem,
-                request_sha256=provider_request_sha256,
-                request_utf8_bytes=len(canonical_request.encode("utf-8")),
-            )
+            try:
+                reservation = self._budget_ledger.reserve(
+                    phase=self._budget_phase,
+                    model_id=self.model_id,
+                    call_stem=call_stem,
+                    request_sha256=provider_request_sha256,
+                    request_utf8_bytes=len(canonical_request),
+                )
+            except LiveBudgetError:
+                raise
+            except BaseException:
+                archive_error = ProviderArchiveError(
+                    "Private budget reservation failed before provider network I/O"
+                )
+                archive_error.provider_call_attempted = False
+                raise archive_error from None
         attempted_at_utc = _utc_now()
         request_record = {
             "record_version": DECISION_SCHEMA_VERSION,
@@ -356,29 +431,88 @@ class OpenAIResponsesBackend(AgentBackend):
             request_record_sha256 = _write_private_json(request_path, request_record)
         except BaseException:
             if reservation is not None and self._budget_ledger is not None:
-                self._budget_ledger.cancel_before_provider_call(
-                    reservation,
-                    reason="private_request_record_write_failed_before_network_io",
-                )
-            raise
+                try:
+                    self._budget_ledger.cancel_before_provider_call(
+                        reservation,
+                        reason="private_request_record_write_failed_before_network_io",
+                    )
+                except BaseException:
+                    pass
+            archive_error = ProviderArchiveError(
+                "Private request record failed before provider network I/O"
+            )
+            archive_error.provider_call_attempted = False
+            raise archive_error from None
 
         started = time.perf_counter()
+        provider_call_attempted = False
+        response_returned = False
         try:
-            response = self._client.responses.create(**provider_request)  # type: ignore[attr-defined]
+            create_response = self._client.responses.create  # type: ignore[attr-defined]
+            if (
+                self._trusted_import_roots is not None
+                and self._trusted_import_entries is not None
+            ):
+                with _trusted_provider_call_imports(
+                    self._trusted_import_roots,
+                    self._trusted_import_entries,
+                ):
+                    provider_call_attempted = True
+                    response = create_response(**provider_request)
+                    response_returned = True
+            else:
+                provider_call_attempted = True
+                response = create_response(**provider_request)
+                response_returned = True
+            latency_ms = (time.perf_counter() - started) * 1000
+            raw_response = _jsonable_response(response)
+            received_at_utc = _utc_now()
+            request_id = _transport_request_id(response, raw_response)
+            usage = _token_usage_or_none(response, raw_response)
+            response_status = _field(response, raw_response, "status")
+            resolved_model = _field(response, raw_response, "model")
+            response_service_tier = _field(response, raw_response, "service_tier")
         # Provider SDKs can surface transport/protocol failures through several
         # unrelated exception types; all must become the same typed fail-closed
         # provider outcome while preserving the private error record.
         except Exception as exc:  # noqa: BLE001
+            if not provider_call_attempted:
+                if reservation is not None and self._budget_ledger is not None:
+                    try:
+                        self._budget_ledger.cancel_before_provider_call(
+                            reservation,
+                            reason=(
+                                "trusted_provider_boundary_failed_before_sdk_invocation"
+                            ),
+                        )
+                    except BaseException:
+                        archive_error = ProviderArchiveError(
+                            "Private budget cancellation failed before provider call"
+                        )
+                        archive_error.provider_call_attempted = False
+                        raise archive_error from None
+                boundary_error = ProviderImportBoundaryError(
+                    "Trusted provider boundary failed before SDK invocation"
+                )
+                boundary_error.provider_call_attempted = False
+                raise boundary_error from None
             latency_ms = (time.perf_counter() - started) * 1000
             recorded_at_utc = _utc_now()
             request_id = _transport_request_id(exc, {})
             provider_error_response = _provider_error_response(exc)
             budget_event = None
             if reservation is not None and self._budget_ledger is not None:
-                budget_event = self._budget_ledger.forfeit(
-                    reservation,
-                    reason="provider_exception_usage_unavailable",
-                )
+                try:
+                    budget_event = self._budget_ledger.forfeit(
+                        reservation,
+                        reason="provider_exception_usage_unavailable",
+                    )
+                except BaseException:
+                    archive_error = ProviderArchiveError(
+                        "Private budget disposition failed after provider network I/O"
+                    )
+                    archive_error.provider_call_attempted = True
+                    raise archive_error from None
             error_record = {
                 "record_version": DECISION_SCHEMA_VERSION,
                 "recorded_at_utc": recorded_at_utc,
@@ -388,10 +522,30 @@ class OpenAIResponsesBackend(AgentBackend):
                 "latency_ms": latency_ms,
                 "budget_event": budget_event,
             }
-            result_record_sha256 = _write_private_json(
-                self.raw_log_dir / f"{call_stem}.error.json", error_record
+            try:
+                result_record_sha256 = _write_private_json(
+                    self.raw_log_dir / f"{call_stem}.error.json", error_record
+                )
+            except BaseException:
+                archive_error = ProviderArchiveError(
+                    "Private provider error record failed after network I/O"
+                )
+                archive_error.provider_call_attempted = True
+                raise archive_error from None
+            status_code = (
+                provider_error_response.get("status_code")
+                if provider_error_response is not None
+                else None
             )
-            raise ProviderCallError(
+            if response_returned:
+                error_class = ProviderArchiveError
+            elif isinstance(exc, ProviderImportBoundaryError):
+                error_class = ProviderContractError
+            elif _is_fatal_provider_access_error(exc, provider_error_response):
+                error_class = ProviderAccessError
+            else:
+                error_class = ProviderCallError
+            raised_error = error_class(
                 "OpenAI provider request failed; inspect the linked private error record",
                 provider_metadata=self._failure_metadata(
                     call_stem=call_stem,
@@ -408,41 +562,57 @@ class OpenAIResponsesBackend(AgentBackend):
                     result_record_kind="error",
                     response_received=provider_error_response is not None,
                     model_response_received=False,
-                    http_status_code=(
-                        provider_error_response.get("status_code")
-                        if provider_error_response is not None
-                        else None
-                    ),
+                    http_status_code=(status_code if isinstance(status_code, int) else None),
                 ),
                 latency_ms=latency_ms,
-            ) from None
+            )
+            if response_returned:
+                raised_error.provider_call_attempted = True
+            raise raised_error from None
 
-        latency_ms = (time.perf_counter() - started) * 1000
-        raw_response = _jsonable_response(response)
-        received_at_utc = _utc_now()
-        request_id = _transport_request_id(response, raw_response)
         response_path = self.raw_log_dir / f"{call_stem}.response.json"
-        usage = _token_usage_or_none(response, raw_response)
+        contract_mismatch = self._budget_ledger is not None and (
+            resolved_model != self.model_id
+            or response_service_tier != FROZEN_SERVICE_TIER
+        )
         budget_event: dict[str, object] | None = None
         budget_error: BudgetAccountingError | None = None
         if reservation is not None and self._budget_ledger is not None:
-            if usage is None:
-                budget_event = self._budget_ledger.forfeit(
-                    reservation,
-                    reason="provider_response_missing_valid_usage",
-                )
-                budget_error = BudgetAccountingError(
-                    "Provider response omitted valid usage accounting"
-                )
-            else:
-                try:
+            try:
+                if contract_mismatch:
+                    # Never release a reservation using usage reported under a
+                    # different model/tier contract.  Preserve the full hold
+                    # and abort after archiving the response.
+                    budget_event = self._budget_ledger.forfeit(
+                        reservation,
+                        reason="provider_response_contract_mismatch",
+                    )
+                    if usage is None:
+                        budget_error = BudgetAccountingError(
+                            "Provider response omitted valid usage accounting"
+                        )
+                elif usage is None:
+                    budget_event = self._budget_ledger.forfeit(
+                        reservation,
+                        reason="provider_response_missing_valid_usage",
+                    )
+                    budget_error = BudgetAccountingError(
+                        "Provider response omitted valid usage accounting"
+                    )
+                else:
                     budget_event = self._budget_ledger.settle(
                         reservation,
                         input_tokens=usage[0],
                         output_tokens=usage[1],
                     )
-                except BudgetAccountingError as exc:
-                    budget_error = exc
+            except BudgetAccountingError as exc:
+                budget_error = exc
+            except BaseException:
+                archive_error = ProviderArchiveError(
+                    "Private budget disposition failed after provider network I/O"
+                )
+                archive_error.provider_call_attempted = True
+                raise archive_error from None
         response_record = {
             "record_version": DECISION_SCHEMA_VERSION,
             "received_at_utc": received_at_utc,
@@ -451,14 +621,18 @@ class OpenAIResponsesBackend(AgentBackend):
             "budget_event": budget_event,
             "provider_response": raw_response,
         }
-        result_record_sha256 = _write_private_json(response_path, response_record)
+        try:
+            result_record_sha256 = _write_private_json(response_path, response_record)
+        except BaseException:
+            archive_error = ProviderArchiveError(
+                "Private provider response record failed after network I/O"
+            )
+            archive_error.provider_call_attempted = True
+            raise archive_error from None
 
         if budget_error is not None:
             raise budget_error
         input_tokens, output_tokens = usage or _token_usage(response, raw_response)
-        response_status = _field(response, raw_response, "status")
-        resolved_model = _field(response, raw_response, "model")
-        response_service_tier = _field(response, raw_response, "service_tier")
         metadata: dict[str, object] = {
             "provider": "openai",
             "api": "responses",
@@ -490,6 +664,7 @@ class OpenAIResponsesBackend(AgentBackend):
             "model_response_received": True,
             "failure_type": None,
             "call_order": self._call_count,
+            "retry_count": 0,
             "attempted_at_utc": attempted_at_utc,
             "received_at_utc": received_at_utc,
             **{
@@ -513,10 +688,7 @@ class OpenAIResponsesBackend(AgentBackend):
             },
         }
 
-        if self._budget_ledger is not None and (
-            resolved_model != self.model_id
-            or response_service_tier != FROZEN_SERVICE_TIER
-        ):
+        if contract_mismatch:
             raise ProviderContractError(
                 "Provider response violated the frozen model or service-tier contract",
                 provider_metadata={**metadata, "failure_type": "provider_contract"},
@@ -583,7 +755,7 @@ class OpenAIResponsesBackend(AgentBackend):
     def _next_call_stem(self, provider_request: Mapping[str, object]) -> str:
         self._call_count += 1
         digest = hashlib.sha256(
-            json.dumps(provider_request, sort_keys=True, separators=(",", ":")).encode()
+            _canonical_json_bytes(provider_request)
         ).hexdigest()[:12]
         return f"call-{self._call_count:06d}-{digest}"
 
@@ -631,6 +803,7 @@ class OpenAIResponsesBackend(AgentBackend):
             "failure_type": "provider_error",
             "error_type": error_type,
             "call_order": self._call_count,
+            "retry_count": 0,
             "attempted_at_utc": attempted_at_utc,
             "received_at_utc": received_at_utc,
             **{
@@ -713,9 +886,7 @@ def _action_catalog(
     catalog: list[tuple[str, ActionSpec]] = []
     for index, action in enumerate(offered_actions, start=1):
         serialized = _action_payload(action)
-        digest = hashlib.sha256(
-            json.dumps(serialized, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()[:12]
+        digest = hashlib.sha256(_canonical_json_bytes(serialized)).hexdigest()[:12]
         catalog.append((f"a{index:02d}-{digest}", action))
     return tuple(catalog)
 
@@ -930,7 +1101,14 @@ def _provider_error_response(error: Exception) -> dict[str, object] | None:
 
     response = getattr(error, "response", None)
     if response is None:
-        return None
+        status_code = getattr(error, "status_code", None)
+        body = getattr(error, "body", None)
+        if not isinstance(status_code, int) and body is None:
+            return None
+        return {
+            "status_code": status_code if isinstance(status_code, int) else None,
+            "body": _jsonable_response(body),
+        }
     status_code = getattr(response, "status_code", None)
     result: dict[str, object] = {
         "status_code": status_code if isinstance(status_code, int) else None,
@@ -941,6 +1119,36 @@ def _provider_error_response(error: Exception) -> dict[str, object] | None:
         body = getattr(response, "text", None)
     result["body"] = _jsonable_response(body)
     return result
+
+
+def _is_fatal_provider_access_error(
+    error: Exception,
+    provider_error_response: dict[str, object] | None,
+) -> bool:
+    """Classify only frozen credential/model-access failures as fatal."""
+
+    status_code = (
+        provider_error_response.get("status_code")
+        if provider_error_response is not None
+        else getattr(error, "status_code", None)
+    )
+    if status_code in {401, 403, 404}:
+        return True
+    fatal_codes = {
+        "authentication_error",
+        "invalid_api_key",
+        "insufficient_permissions",
+        "model_not_found",
+        "permission_denied",
+    }
+    candidates: list[object] = [getattr(error, "code", None)]
+    if provider_error_response is not None:
+        body = provider_error_response.get("body")
+        for item in _walk_dicts(body):
+            candidates.extend((item.get("code"), item.get("type")))
+    return any(
+        isinstance(value, str) and value in fatal_codes for value in candidates
+    )
 
 
 def _token_usage(response: object, raw_response: object) -> tuple[int, int]:
@@ -1007,11 +1215,416 @@ def _write_private_json(path: Path, payload: object) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _canonical_json_bytes(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 def _installed_sdk_version() -> str:
     try:
         return importlib.metadata.version("openai")
     except importlib.metadata.PackageNotFoundError:  # pragma: no cover
         return "unknown"
+
+
+@contextmanager
+def _verified_openai_sdk_import():
+    """Import and construct SDK types without repository import-path influence."""
+
+    original_path = list(sys.path)
+    trusted_roots, trusted_entries = _trusted_interpreter_import_paths(original_path)
+    _reject_untrusted_import_collisions(
+        original_path,
+        trusted_roots=trusted_roots,
+        trusted_entries=trusted_entries,
+    )
+    modules_before = set(sys.modules)
+    original_meta_path = list(sys.meta_path)
+    _assert_standard_import_path_hooks()
+    sys.path[:] = trusted_entries
+    sys.meta_path[:] = _trusted_meta_path()
+    importlib.invalidate_caches()
+    try:
+        package_root, distribution_files = _verified_openai_import_location(
+            trusted_roots
+        )
+        try:
+            module = importlib.import_module("openai")
+        except ImportError as exc:  # pragma: no cover - dependency integration
+            raise RuntimeError(
+                "The live OpenAI backend requires the 'live-openai' extra."
+            ) from exc
+        _verify_new_trusted_modules(modules_before, trusted_roots)
+        _verify_openai_runtime_symbols(
+            module,
+            package_root=package_root,
+            distribution_files=distribution_files,
+        )
+        yield (
+            module.DefaultHttpxClient,
+            module.OpenAI,
+            trusted_roots,
+            tuple(trusted_entries),
+        )
+        _verify_new_trusted_modules(modules_before, trusted_roots)
+    finally:
+        sys.meta_path[:] = original_meta_path
+        sys.path[:] = original_path
+        importlib.invalidate_caches()
+
+
+@contextmanager
+def _trusted_provider_call_imports(
+    trusted_roots: tuple[Path, ...],
+    trusted_entries: tuple[str, ...],
+):
+    """Keep repository paths and custom finders out of every provider call."""
+
+    original_path = list(sys.path)
+    original_meta_path = list(sys.meta_path)
+    modules_before = set(sys.modules)
+    try:
+        _reject_untrusted_import_collisions(
+            original_path,
+            trusted_roots=trusted_roots,
+            trusted_entries=list(trusted_entries),
+        )
+        _assert_standard_import_path_hooks()
+        sys.path[:] = list(trusted_entries)
+        sys.meta_path[:] = _trusted_meta_path()
+        importlib.invalidate_caches()
+        yield
+    finally:
+        try:
+            _verify_new_trusted_modules(modules_before, trusted_roots)
+        finally:
+            sys.meta_path[:] = original_meta_path
+            sys.path[:] = original_path
+            importlib.invalidate_caches()
+
+
+def _trusted_meta_path() -> list[object]:
+    return [
+        importlib.machinery.BuiltinImporter,
+        importlib.machinery.FrozenImporter,
+        importlib.machinery.PathFinder,
+    ]
+
+
+def _assert_standard_import_path_hooks() -> None:
+    hooks = sys.path_hooks
+    if (
+        len(hooks) != 2
+        or hooks[0] is not zipimport.zipimporter
+        or getattr(hooks[1], "__module__", None) != "_frozen_importlib_external"
+        or getattr(hooks[1], "__name__", None) != "path_hook_for_FileFinder"
+    ):
+        raise ProviderImportBoundaryError(
+            "Refusing nonstandard Python import path hooks at the provider boundary"
+        )
+
+
+def _trusted_interpreter_import_paths(
+    import_path: list[str],
+) -> tuple[tuple[Path, ...], list[str]]:
+    configured = sysconfig.get_paths()
+    roots: list[Path] = []
+    for name in ("stdlib", "platstdlib", "purelib", "platlib"):
+        raw = configured.get(name)
+        if not isinstance(raw, str):
+            continue
+        try:
+            resolved = Path(raw).resolve(strict=True)
+        except OSError as exc:  # pragma: no cover - broken interpreter install
+            raise ProviderImportBoundaryError(
+                "The interpreter import roots could not be resolved"
+            ) from exc
+        if resolved not in roots:
+            roots.append(resolved)
+    if not roots:
+        raise ProviderImportBoundaryError(
+            "The interpreter exposes no trusted import roots"
+        )
+
+    trusted_entries: list[str] = []
+    for entry in import_path:
+        if not entry:
+            continue
+        try:
+            resolved = Path(entry).resolve(strict=True)
+        except OSError:
+            continue
+        if any(resolved == root or root in resolved.parents for root in roots):
+            trusted_entries.append(str(resolved))
+    if not trusted_entries:
+        raise ProviderImportBoundaryError(
+            "The interpreter exposes no trusted import search path"
+        )
+    return tuple(roots), trusted_entries
+
+
+def _reject_untrusted_import_collisions(
+    import_path: list[str],
+    *,
+    trusted_roots: tuple[Path, ...],
+    trusted_entries: list[str],
+) -> None:
+    """Reject source-path modules that could shadow SDK or stdlib dependencies."""
+
+    untrusted_entries: set[Path] = set()
+    for entry in import_path:
+        try:
+            resolved = Path(entry or os.getcwd()).resolve(strict=True)
+        except OSError:
+            continue
+        if not any(resolved == root or root in resolved.parents for root in trusted_roots):
+            if resolved.is_file():
+                raise ProviderImportBoundaryError(
+                    "Refusing an untrusted file or archive on the provider import path"
+                )
+            untrusted_entries.add(resolved)
+
+    shadow_names: set[str] = set()
+    for entry in untrusted_entries:
+        if not entry.is_dir():
+            continue
+        try:
+            children = tuple(entry.iterdir())
+        except OSError as exc:
+            raise ProviderImportBoundaryError(
+                "An untrusted import path could not be inspected"
+            ) from exc
+        for child in children:
+            module_name = _top_level_module_name(child)
+            if module_name is not None:
+                shadow_names.add(module_name)
+            elif (
+                child.is_dir()
+                and child.name.isidentifier()
+                and any(
+                    (child / f"__init__{suffix}").is_file()
+                    for suffix in importlib.machinery.all_suffixes()
+                )
+            ):
+                shadow_names.add(child.name)
+
+    for name in sorted(shadow_names - {"mas_safety"}):
+        trusted_spec = importlib.machinery.PathFinder.find_spec(name, trusted_entries)
+        if trusted_spec is not None:
+            raise ProviderImportBoundaryError(
+                "Refusing a repository or ambient module that shadows a trusted "
+                f"provider dependency: {name}"
+            )
+
+    checked_top_levels: set[str] = set()
+    for module_name, module in tuple(sys.modules.items()):
+        top_level = module_name.partition(".")[0]
+        if not top_level or top_level in checked_top_levels or top_level == "mas_safety":
+            continue
+        checked_top_levels.add(top_level)
+        locations = _resolved_module_locations(module)
+        if not locations or all(
+            any(location == root or root in location.parents for root in trusted_roots)
+            for location in locations
+        ):
+            continue
+        if importlib.machinery.PathFinder.find_spec(top_level, trusted_entries) is not None:
+            raise ProviderImportBoundaryError(
+                "Refusing a preloaded module outside the trusted interpreter roots: "
+                f"{top_level}"
+            )
+
+
+def _verify_new_trusted_modules(
+    modules_before: set[str], trusted_roots: tuple[Path, ...]
+) -> None:
+    for name in set(sys.modules) - modules_before:
+        locations = _resolved_module_locations(sys.modules.get(name))
+        if any(
+            not any(location == root or root in location.parents for root in trusted_roots)
+            for location in locations
+        ):
+            raise ProviderImportBoundaryError(
+                "The OpenAI SDK loaded a module outside trusted interpreter roots"
+            )
+
+
+def _top_level_module_name(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    for suffix in sorted(importlib.machinery.all_suffixes(), key=len, reverse=True):
+        if path.name.endswith(suffix):
+            name = path.name[: -len(suffix)]
+            if name.isidentifier():
+                return name
+    return None
+
+
+def _resolved_module_source(module: object) -> Path | None:
+    if module is None:
+        return None
+    raw = getattr(module, "__file__", None)
+    if not isinstance(raw, str):
+        spec = getattr(module, "__spec__", None)
+        raw = getattr(spec, "origin", None)
+    if not isinstance(raw, str) or raw in {"built-in", "frozen"}:
+        return None
+    try:
+        return Path(raw).resolve(strict=True)
+    except OSError:
+        return Path(raw).resolve()
+
+
+def _resolved_module_locations(module: object) -> tuple[Path, ...]:
+    locations: list[Path] = []
+    source = _resolved_module_source(module)
+    if source is not None:
+        locations.append(source)
+    spec = getattr(module, "__spec__", None)
+    search_locations = getattr(spec, "submodule_search_locations", None)
+    if search_locations is None:
+        search_locations = getattr(module, "__path__", ())
+    for raw in search_locations or ():
+        if not isinstance(raw, str):
+            continue
+        try:
+            resolved = Path(raw).resolve(strict=True)
+        except OSError:
+            resolved = Path(raw).resolve()
+        if resolved not in locations:
+            locations.append(resolved)
+    return tuple(locations)
+
+
+def _verified_openai_import_location(
+    trusted_roots: tuple[Path, ...],
+) -> tuple[Path, frozenset[Path]]:
+    """Resolve the SDK from its installed distribution before importing code.
+
+    Checking the package spec before import prevents a repository-root
+    ``openai.py`` or ``openai/`` package from executing with the Stage 4 key.
+    The returned file allowlist is used again after import to bind the exposed
+    client classes to the same installed distribution.
+    """
+
+    try:
+        distribution = importlib.metadata.distribution("openai")
+    except importlib.metadata.PackageNotFoundError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "The live OpenAI backend requires the installed 'openai' distribution."
+        ) from exc
+    files = distribution.files
+    if files is None:
+        raise RuntimeError("The installed OpenAI distribution has no file manifest")
+
+    try:
+        distribution_root = Path(distribution.locate_file("")).resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError("The installed OpenAI distribution root is unresolved") from exc
+    allowed_install_roots = {
+        root
+        for name, raw in sysconfig.get_paths().items()
+        if name in {"purelib", "platlib"} and isinstance(raw, str)
+        for root in (Path(raw).resolve(),)
+    }
+    if distribution_root not in allowed_install_roots or not any(
+        distribution_root == root or root in distribution_root.parents
+        for root in trusted_roots
+    ):
+        raise RuntimeError(
+            "Refusing OpenAI distribution metadata outside interpreter site-packages"
+        )
+
+    distribution_files: set[Path] = set()
+    expected_initializers: list[Path] = []
+    for relative in files:
+        if not relative.parts or relative.parts[0] != "openai":
+            continue
+        try:
+            resolved = Path(distribution.locate_file(relative)).resolve(strict=True)
+        except OSError as exc:
+            raise RuntimeError(
+                "The installed OpenAI distribution contains an unresolved file"
+            ) from exc
+        distribution_files.add(resolved)
+        if relative.as_posix() == "openai/__init__.py":
+            expected_initializers.append(resolved)
+    if len(expected_initializers) != 1:
+        raise RuntimeError(
+            "The installed OpenAI distribution has no unique package initializer"
+        )
+
+    expected_initializer = expected_initializers[0]
+    package_root = expected_initializer.parent
+    try:
+        spec = importlib.util.find_spec("openai")
+        actual_initializer = (
+            Path(spec.origin).resolve(strict=True)
+            if spec is not None and isinstance(spec.origin, str)
+            else None
+        )
+        search_locations = (
+            tuple(
+                Path(location).resolve(strict=True)
+                for location in (spec.submodule_search_locations or ())
+            )
+            if spec is not None
+            else ()
+        )
+        loader_path_value = getattr(spec.loader, "path", None) if spec else None
+        loader_path = (
+            Path(loader_path_value).resolve(strict=True)
+            if isinstance(loader_path_value, str)
+            else None
+        )
+    except OSError as exc:
+        raise RuntimeError("The OpenAI import location could not be resolved") from exc
+    if (
+        actual_initializer != expected_initializer
+        or search_locations != (package_root,)
+        or loader_path != expected_initializer
+    ):
+        raise RuntimeError(
+            "Refusing an OpenAI import outside the installed distribution origin"
+        )
+    return package_root, frozenset(distribution_files)
+
+
+def _verify_openai_runtime_symbols(
+    module: object,
+    *,
+    package_root: Path,
+    distribution_files: frozenset[Path],
+) -> None:
+    """Bind the loaded module and client classes to the prechecked package."""
+
+    symbols = (
+        module,
+        getattr(module, "DefaultHttpxClient", None),
+        getattr(module, "OpenAI", None),
+    )
+    resolved_sources: list[Path] = []
+    for symbol in symbols:
+        if symbol is None:
+            raise RuntimeError("The installed OpenAI SDK is missing client symbols")
+        try:
+            source = inspect.getsourcefile(symbol) or inspect.getfile(symbol)
+            resolved_sources.append(Path(source).resolve(strict=True))
+        except (OSError, TypeError) as exc:
+            raise RuntimeError("The OpenAI SDK symbol origin could not be resolved") from exc
+    if any(
+        source not in distribution_files
+        or (source != package_root and package_root not in source.parents)
+        for source in resolved_sources
+    ):
+        raise RuntimeError(
+            "Refusing OpenAI client symbols outside the installed distribution origin"
+        )
 
 
 def _utc_now() -> str:

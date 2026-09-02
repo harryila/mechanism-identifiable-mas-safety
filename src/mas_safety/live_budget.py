@@ -21,6 +21,14 @@ FROZEN_MODEL_IDS = (
     "gpt-5.4-2026-03-05",
 )
 
+_ALLOWED_BUDGET_PHASES = frozenset(
+    {
+        "pre_stage_1_smoke",
+        "stage_1_live_feasibility",
+        "stage_4_confirmatory",
+    }
+)
+
 # Standard-tier list prices frozen on 2026-08-31. One nano-USD is 1e-9 USD.
 # $5.00 / 1M tokens = 5,000 nano-USD per token, for example.
 MODEL_PRICING_NANO_USD_PER_TOKEN: dict[str, dict[str, int]] = {
@@ -58,7 +66,7 @@ class BudgetReservation:
 
 
 class LiveBudgetLedger:
-    """Private append-only spending authority shared by smoke and Stage 1.
+    """Private append-only spending authority shared by smoke, Stage 1, and Stage 4.
 
     A full conservative call allowance is durably held before network I/O. A
     response with valid usage settles at full, uncached standard-tier rates and
@@ -106,6 +114,9 @@ class LiveBudgetLedger:
                 "maximum_provider_request_utf8_bytes": (
                     MAX_PROVIDER_REQUEST_UTF8_BYTES
                 ),
+                "stage4_successful_input_token_bound": (
+                    "canonical_request_utf8_bytes"
+                ),
             },
             create=True,
         )
@@ -120,7 +131,7 @@ class LiveBudgetLedger:
         request_sha256: str,
         request_utf8_bytes: int,
     ) -> BudgetReservation:
-        if phase not in {"pre_stage_1_smoke", "stage_1_live_feasibility"}:
+        if phase not in _ALLOWED_BUDGET_PHASES:
             raise ValueError("Unknown live-budget phase")
         if model_id not in MODEL_PRICING_NANO_USD_PER_TOKEN:
             raise ValueError("Model has no frozen standard-tier price")
@@ -168,9 +179,17 @@ class LiveBudgetLedger:
                     "requested_reservation_nano_usd": reserved_nano_usd,
                 }
             )
-            raise BudgetCeilingExceeded(
-                "The next provider call cannot fit inside the hard USD 20 ceiling"
-            )
+            if phase == "stage_4_confirmatory":
+                message = (
+                    "The next provider call cannot fit inside the hard Stage 4 "
+                    "authorized ceiling"
+                )
+            else:
+                # Preserve the historical Stage 1 error contract.
+                message = (
+                    "The next provider call cannot fit inside the hard USD 20 ceiling"
+                )
+            raise BudgetCeilingExceeded(message)
 
         self._reservation_count += 1
         self._held += reserved_nano_usd
@@ -204,16 +223,29 @@ class LiveBudgetLedger:
         output_tokens: int,
     ) -> dict[str, object]:
         active = self._require_active(reservation)
+        stage4_input_within_committed_request = (
+            active.phase != "stage_4_confirmatory"
+            or (
+                type(input_tokens) is int
+                and input_tokens <= active.request_utf8_bytes
+            )
+        )
         valid_usage = (
             type(input_tokens) is int
             and 0 <= input_tokens <= active.input_token_bound
             and type(output_tokens) is int
             and 0 <= output_tokens <= active.output_token_bound
+            and stage4_input_within_committed_request
         )
         if not valid_usage:
+            reason = (
+                "provider_usage_above_canonical_request_utf8_byte_bound"
+                if not stage4_input_within_committed_request
+                else "missing_malformed_or_out_of_bounds_provider_usage"
+            )
             self.forfeit(
                 reservation,
-                reason="missing_malformed_or_out_of_bounds_provider_usage",
+                reason=reason,
             )
             raise BudgetAccountingError(
                 "Provider usage could not be reconciled inside the frozen reservation"
@@ -412,9 +444,10 @@ def audit_budget_ledger(path: str | Path) -> dict[str, object]:
     try:
         if ledger_path.stat().st_mode & 0o077:
             checks["private_file_permissions"] = False
+        ledger_bytes = ledger_path.read_bytes()
         events = [
             json.loads(line)
-            for line in ledger_path.read_text(encoding="utf-8").splitlines()
+            for line in ledger_bytes.decode("utf-8").splitlines()
             if line.strip()
         ]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
@@ -449,6 +482,8 @@ def audit_budget_ledger(path: str | Path) -> dict[str, object]:
                 == FROZEN_OUTPUT_RESERVATION_TOKENS
                 and event.get("maximum_provider_request_utf8_bytes")
                 == MAX_PROVIDER_REQUEST_UTF8_BYTES
+                and event.get("stage4_successful_input_token_bound")
+                == "canonical_request_utf8_bytes"
             ):
                 checks["frozen_pricing_and_reservation_configuration"] = False
         elif index == 1:
@@ -531,6 +566,29 @@ def audit_budget_ledger(path: str | Path) -> dict[str, object]:
                     and event.get("call_stem") == held_event.get("call_stem")
                     and event.get("request_sha256")
                     == held_event.get("request_sha256")
+                    and (
+                        event_kind != "reservation_settled"
+                        or (
+                            type(input_tokens) is int
+                            and 0
+                            <= input_tokens
+                            <= FROZEN_INPUT_RESERVATION_TOKENS
+                            and type(output_tokens) is int
+                            and 0
+                            <= output_tokens
+                            <= FROZEN_OUTPUT_RESERVATION_TOKENS
+                            and (
+                                held_event.get("phase")
+                                != "stage_4_confirmatory"
+                                or (
+                                    type(held_event.get("request_utf8_bytes"))
+                                    is int
+                                    and input_tokens
+                                    <= int(held_event["request_utf8_bytes"])
+                                )
+                            )
+                        )
+                    )
                 ):
                     checks["event_state_replays"] = False
                 replay_held -= reserved
@@ -567,7 +625,7 @@ def audit_budget_ledger(path: str | Path) -> dict[str, object]:
         "checks": checks,
         "event_count": len(events),
         "ceiling_nano_usd": ceiling,
-        "ledger_file_sha256": hashlib.sha256(ledger_path.read_bytes()).hexdigest(),
+        "ledger_file_sha256": hashlib.sha256(ledger_bytes).hexdigest(),
         "last_event_sha256": previous,
         "committed_nano_usd": terminal.get("committed_nano_usd"),
         "committed_usd": (
