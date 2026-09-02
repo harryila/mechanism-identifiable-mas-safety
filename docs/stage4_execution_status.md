@@ -99,7 +99,9 @@ Regression tests cover both paths. The audit also records the deliberate limit
 of internal commitments: an actor who coherently replaces an entire public
 bundle and recomputes all of its checksums remains inside the publication trust
 boundary until the released commit, tag, signature, or another post-result
-anchor is independently recorded.
+anchor is independently recorded. The complete provider-free evidence record is
+in the
+[`pre-freeze audit`](../verification/stage4-confirmatory/pre_freeze_audit.md).
 
 ## Budget and authority blocker
 

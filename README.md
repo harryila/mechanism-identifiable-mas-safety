@@ -48,7 +48,10 @@ multi-agent pipeline.
   private-storage attestations, one-shot authority, final commit, and annotated
   tag are unresolved. See the
   [`execution status`](docs/stage4_execution_status.md) and
-  [`trusted-computing-base map`](docs/stage4_trusted_computing_base.md).
+  [`trusted-computing-base map`](docs/stage4_trusted_computing_base.md). The
+  provider-free [`pre-freeze audit`](verification/stage4-confirmatory/pre_freeze_audit.md)
+  records the independent invariant review, two remediations, clean wheel
+  rehearsal, and remaining trust boundaries.
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a
