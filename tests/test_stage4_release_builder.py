@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import py_compile
+import shutil
 import sys
 from collections import Counter
 from pathlib import Path
@@ -23,7 +24,14 @@ from mas_safety.live_backends import (
 from mas_safety.live_budget import LiveBudgetLedger
 from mas_safety.runner import ExperimentRunner
 from mas_safety.scenarios import load_scenarios
+from mas_safety.stage4_decision import decide_stage4
 from mas_safety.stage4_freeze import build_prompt_commitment_artifact
+from mas_safety.stage4_outcomes import (
+    Stage4ExecutionCommitments,
+    Stage4LabeledOutcome,
+    Stage4OutcomeSet,
+    Stage4RunArtifactCommitment,
+)
 from mas_safety.stage4_runtime import (
     build_stage4_run_bindings,
     load_stage4_schedule_manifest,
@@ -582,14 +590,31 @@ def complete_private_archive(tmp_path_factory: pytest.TempPathFactory) -> dict:
     expected_summary = builder.PUBLIC_VERIFIER.build_expected_summary(
         schedule, public_rows
     )
-    decision = dict.fromkeys(builder.PRIVATE_DECISION_FIELDS)
-    decision.update(
-        {
-            "schema_version": builder.PRIVATE_DECISION_SCHEMA_VERSION,
-            "schedule_hash": schedule["schedule_hash"],
-            "decision": expected_summary["decision"],
-        }
+    commitment_object = Stage4ExecutionCommitments(
+        schema_version=execution_commitments["schema_version"],
+        run_bindings_sha256=execution_commitments["run_bindings_sha256"],
+        protocol_commit_sha=execution_commitments["protocol_commit_sha"],
+        protocol_sha256=execution_commitments["protocol_sha256"],
+        provenance_key_id=execution_commitments["provenance_key_id"],
+        backend_name=execution_commitments["backend_name"],
+        run_artifacts=tuple(
+            Stage4RunArtifactCommitment(**value) for value in run_artifacts
+        ),
     )
+    outcome_set = Stage4OutcomeSet(
+        schema_version=outcomes["schema_version"],
+        schedule_hash=outcomes["schedule_hash"],
+        run_bindings_sha256=outcomes["run_bindings_sha256"],
+        execution_commitments_sha256=outcomes["execution_commitments_sha256"],
+        outcomes=tuple(Stage4LabeledOutcome(**value) for value in private_rows),
+    )
+    decision = decide_stage4(
+        schedule_object,
+        outcome_set,
+        run_bindings=binding_objects,
+        commitments=commitment_object,
+    ).to_dict()
+    assert decision["decision"] == expected_summary["decision"]
     _write_json(archive / "decision.json", decision)
 
     release_source = {
@@ -747,6 +772,77 @@ def test_complete_archive_builds_exact_verified_four_file_release(
         for row in runs["outcomes"]
     )
     assert not (destination / "traces.jsonl").exists()
+
+
+def test_hash_consistent_private_decision_detail_rewrite_is_rejected(
+    complete_private_archive: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = complete_private_archive
+    archive = tmp_path / "stage4-private-mutated"
+    shutil.copytree(fixture["archive"], archive)
+
+    decision_path = archive / "decision.json"
+    decision = json.loads(decision_path.read_text())
+    decision["outcome_analysis"]["workflow_count"] += 1
+    _write_json(decision_path, decision)
+
+    source_path = archive / "private_release_source.json"
+    source = json.loads(source_path.read_text())
+    source["decision_file_sha256"] = _sha(decision_path)
+    _write_json(source_path, source)
+
+    events_path = archive / "execution_events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    events[-1]["private_release_source_sha256"] = _sha(source_path)
+    events[-1].pop("event_sha256")
+    events[-1]["event_sha256"] = builder._semantic_sha256(events[-1])
+    _write_jsonl(events_path, events)
+
+    manifest_path = archive / builder.ARCHIVE_MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text())
+    rewritten = {
+        "decision.json": decision_path,
+        "execution_events.jsonl": events_path,
+        "private_release_source.json": source_path,
+    }
+    for row in manifest["files"]:
+        path = rewritten.get(row["path"])
+        if path is not None:
+            row["sha256"] = _sha(path)
+            row["bytes"] = path.stat().st_size
+    manifest.pop("archive_commitment_sha256")
+    manifest["archive_commitment_sha256"] = builder._semantic_sha256(manifest)
+    _write_json(manifest_path, manifest)
+
+    complete_path = archive / builder.COMPLETE_MARKER_NAME
+    complete = json.loads(complete_path.read_text())
+    complete["decision_sha256"] = _sha(decision_path)
+    complete["private_release_source_sha256"] = _sha(source_path)
+    complete["terminal_event_sha256"] = events[-1]["event_sha256"]
+    complete["private_archive_manifest_sha256"] = _sha(manifest_path)
+    _write_json(complete_path, complete)
+
+    monkeypatch.setattr(
+        builder,
+        "_resolve_freeze_tag_target",
+        lambda _freeze, _path: fixture["tag_target"],
+    )
+    monkeypatch.setattr(
+        builder, "_validate_full_final_freeze", lambda *_args, **_kwargs: None
+    )
+    with pytest.raises(
+        builder.ReleaseBuildError,
+        match="private_decision_recomputation_mismatch",
+    ):
+        builder.build_stage4_release(
+            archive,
+            destination=tmp_path / "public-rejected",
+            schedule_path=fixture["schedule_path"],
+            freeze_path=fixture["freeze_path"],
+            _verify=_core_public_verifier,
+        )
 
 
 def test_raw_request_outer_schema_is_exact(

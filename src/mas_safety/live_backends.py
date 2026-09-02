@@ -606,6 +606,8 @@ class OpenAIResponsesBackend(AgentBackend):
                         output_tokens=usage[1],
                     )
             except BudgetAccountingError as exc:
+                if exc.budget_event is not None:
+                    budget_event = dict(exc.budget_event)
                 budget_error = exc
             except BaseException:
                 archive_error = ProviderArchiveError(

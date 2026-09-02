@@ -640,6 +640,25 @@ def _canonical_json_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def _require_exact_json(value: object, expected: object, code: str) -> None:
+    """Compare parsed JSON without Python bool/int/numeric coercion."""
+
+    _require(type(value) is type(expected), code)
+    if type(expected) is dict:
+        assert type(value) is dict and type(expected) is dict
+        _require(set(value) == set(expected), code)
+        for key in expected:
+            _require_exact_json(value[key], expected[key], code)
+        return
+    if type(expected) is list:
+        assert type(value) is list and type(expected) is list
+        _require(len(value) == len(expected), code)
+        for observed, wanted in zip(value, expected, strict=True):
+            _require_exact_json(observed, wanted, code)
+        return
+    _require(value == expected, code)
+
+
 def _semantic_sha256(value: object) -> str:
     return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
 
@@ -2016,6 +2035,9 @@ def _load_project_source_modules(
         "mas_safety.stage4_live",
         "mas_safety.stage4_runtime",
         "mas_safety.stage4_freeze",
+        "mas_safety.stage4_analysis",
+        "mas_safety.stage4_outcomes",
+        "mas_safety.stage4_decision",
     )
     _assert_frozen_project_module_origins(freeze)
     try:
@@ -3843,6 +3865,92 @@ def _validate_private_outcome_extras(
     )
 
 
+def _validate_private_decision_recomputation(
+    *,
+    schedule_path: Path,
+    freeze: Mapping[str, Any],
+    outcomes: Mapping[str, Any],
+    commitments: Mapping[str, Any],
+    private_decision: Mapping[str, Any],
+) -> None:
+    """Recompute and compare the complete private decision from frozen source.
+
+    The public verifier independently recomputes every publicly decidable gate,
+    but the private archive retains additional analysis rows.  Reconstructing
+    the typed outcome set here prevents a hash-consistent edit to those private
+    details from surviving release construction merely because the top-level
+    ``GO``/``NO_GO`` value is unchanged.
+    """
+
+    modules = _load_frozen_replay_modules(freeze)
+    try:
+        runtime = freeze.get("runtime_binding")
+        _require(type(runtime) is dict, "freeze_runtime_binding_invalid")
+        assert type(runtime) is dict
+        batch_id = _expect_str(
+            runtime.get("batch_id"), "freeze_runtime_batch_id_invalid"
+        )
+        schedule_object = modules["stage4_runtime"].load_stage4_schedule_manifest(
+            schedule_path
+        )
+        binding_objects = modules["stage4_runtime"].build_stage4_run_bindings(
+            schedule_object,
+            batch_id=batch_id,
+        )
+
+        outcome_module = modules["stage4_outcomes"]
+        artifacts = commitments.get("run_artifacts")
+        rows = outcomes.get("outcomes")
+        _require(
+            type(artifacts) is list and type(rows) is list,
+            "private_decision_recomputation_input_invalid",
+        )
+        assert type(artifacts) is list and type(rows) is list
+        commitment_object = outcome_module.Stage4ExecutionCommitments(
+            schema_version=commitments["schema_version"],
+            run_bindings_sha256=commitments["run_bindings_sha256"],
+            protocol_commit_sha=commitments["protocol_commit_sha"],
+            protocol_sha256=commitments["protocol_sha256"],
+            provenance_key_id=commitments["provenance_key_id"],
+            backend_name=commitments["backend_name"],
+            run_artifacts=tuple(
+                outcome_module.Stage4RunArtifactCommitment(**dict(value))
+                for value in artifacts
+            ),
+        )
+        outcome_set = outcome_module.Stage4OutcomeSet(
+            schema_version=outcomes["schema_version"],
+            schedule_hash=outcomes["schedule_hash"],
+            run_bindings_sha256=outcomes["run_bindings_sha256"],
+            execution_commitments_sha256=outcomes[
+                "execution_commitments_sha256"
+            ],
+            outcomes=tuple(
+                outcome_module.Stage4LabeledOutcome(**dict(value))
+                for value in rows
+            ),
+        )
+        expected = modules["stage4_decision"].decide_stage4(
+            schedule_object,
+            outcome_set,
+            run_bindings=binding_objects,
+            commitments=commitment_object,
+        ).to_dict()
+    except ReleaseBuildError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalize frozen replay failures
+        raise ReleaseBuildError("private_decision_recomputation_failed") from exc
+    normalized_expected = _parse_json_bytes(
+        _canonical_json_bytes(expected),
+        "private_decision_recomputation_failed",
+    )
+    _require_exact_json(
+        private_decision,
+        normalized_expected,
+        "private_decision_recomputation_mismatch",
+    )
+
+
 def _project_public_rows(
     outcomes: Mapping[str, Any],
     *,
@@ -4163,6 +4271,13 @@ def build_stage4_release(
         ledger_model_counts=ledger_counts,
         freeze=freeze,
         schedule_path=schedule_file,
+    )
+    _validate_private_decision_recomputation(
+        schedule_path=schedule_file,
+        freeze=freeze,
+        outcomes=outcomes,
+        commitments=execution_commitments,
+        private_decision=private_decision,
     )
     public_files, summary = _public_bundle_bytes(schedule=schedule, rows=rows)
     _require(

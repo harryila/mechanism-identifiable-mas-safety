@@ -88,6 +88,19 @@ the immutable Stage 3 annotated tag. The constructor was an isolated Codex
 process, not an external human. The sealed scenarios must not be edited; a fatal
 validity defect requires disclosure and a separately versioned restart.
 
+A focused, outcome-blind pre-freeze audit traced the eight execution and release
+invariants listed in the
+[`Stage 4 trusted computing base`](stage4_trusted_computing_base.md). It found
+and repaired two fail-closed evidence-integrity defects before freeze: invalid
+provider usage now preserves and archives the exact durable forfeiture event,
+and release construction now recomputes and exactly compares the complete
+private decision artifact rather than checking only its headline decision.
+Regression tests cover both paths. The audit also records the deliberate limit
+of internal commitments: an actor who coherently replaces an entire public
+bundle and recomputes all of its checksums remains inside the publication trust
+boundary until the released commit, tag, signature, or another post-result
+anchor is independently recorded.
+
 ## Budget and authority blocker
 
 Applying the exact Stage 1 conservative sizing rule offline to all 3,072 exact
@@ -112,6 +125,16 @@ and aborts `INCOMPLETE`.
 
 The previous USD 20 authority is insufficient and is not reusable. No Stage 4
 ceiling or call is currently authorized.
+
+The proposed Stage 4-specific byte-sized pre-call reservation was not adopted.
+Official OpenAI documentation states that input-token counts include structural
+formatting tokens that may not appear in locally tokenized fields and provides
+the `POST /responses/input_tokens` endpoint for an exact model-side count. It
+does not state that billed input tokens are bounded by locally serialized
+request bytes. Without that provider guarantee, the post-response byte check
+cannot justify a smaller reservation for a transport failure that returns no
+usage. The current USD 257.023620000 completion-safe authority requirement is
+therefore unchanged; this is a reservation ceiling, not a spending forecast.
 
 Final execution additionally requires a fresh Stage 4 credential and provenance
 key, encrypted-at-rest private storage and immutable archive attestations, a new

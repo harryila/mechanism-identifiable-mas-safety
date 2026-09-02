@@ -50,6 +50,17 @@ class BudgetCeilingExceeded(LiveBudgetError):
 class BudgetAccountingError(LiveBudgetError):
     """Raised when provider usage cannot be conservatively reconciled."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        budget_event: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.budget_event = (
+            dict(budget_event) if budget_event is not None else None
+        )
+
 
 @dataclass(frozen=True)
 class BudgetReservation:
@@ -243,12 +254,13 @@ class LiveBudgetLedger:
                 if not stage4_input_within_committed_request
                 else "missing_malformed_or_out_of_bounds_provider_usage"
             )
-            self.forfeit(
+            budget_event = self.forfeit(
                 reservation,
                 reason=reason,
             )
             raise BudgetAccountingError(
-                "Provider usage could not be reconciled inside the frozen reservation"
+                "Provider usage could not be reconciled inside the frozen reservation",
+                budget_event=budget_event,
             )
 
         price = MODEL_PRICING_NANO_USD_PER_TOKEN[active.model_id]
@@ -256,9 +268,13 @@ class LiveBudgetLedger:
             input_tokens * price["input"] + output_tokens * price["output"]
         )
         if settled_nano_usd > active.reserved_nano_usd:
-            self.forfeit(reservation, reason="settlement_exceeded_reservation")
+            budget_event = self.forfeit(
+                reservation,
+                reason="settlement_exceeded_reservation",
+            )
             raise BudgetAccountingError(
-                "Provider usage exceeded the conservative call reservation"
+                "Provider usage exceeded the conservative call reservation",
+                budget_event=budget_event,
             )
 
         del self._active[active.reservation_id]

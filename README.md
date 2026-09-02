@@ -47,7 +47,8 @@ multi-agent pipeline.
   deliberately `draft_unexecutable`: its budget, fresh credential/provenance identities,
   private-storage attestations, one-shot authority, final commit, and annotated
   tag are unresolved. See the
-  [`execution status`](docs/stage4_execution_status.md).
+  [`execution status`](docs/stage4_execution_status.md) and
+  [`trusted-computing-base map`](docs/stage4_trusted_computing_base.md).
 
 The v0.2 primary claim is whether at least two causally distinct interventions
 yield the same LGH signature in live agents. The secondary claim is a

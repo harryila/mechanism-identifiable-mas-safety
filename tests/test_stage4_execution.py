@@ -77,7 +77,14 @@ def test_finalizer_git_environment_disables_fsmonitor_and_lazy_fetch(
 
 
 class _FakeResponse:
-    def __init__(self, request: dict[str, object], *, decision: str) -> None:
+    def __init__(
+        self,
+        request: dict[str, object],
+        *,
+        decision: str,
+        input_tokens: int = 1,
+        output_tokens: int = 1,
+    ) -> None:
         prompt = json.loads(str(request["input"]))
         if decision == "execute":
             payload = {
@@ -105,7 +112,10 @@ class _FakeResponse:
         self.status = "completed"
         self.service_tier = request["service_tier"]
         self.system_fingerprint = None
-        self.usage = SimpleNamespace(input_tokens=1, output_tokens=1)
+        self.usage = SimpleNamespace(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
 
     def model_dump(self, *, mode: str = "python") -> dict[str, object]:
         del mode
@@ -117,7 +127,10 @@ class _FakeResponse:
             "status": self.status,
             "service_tier": self.service_tier,
             "system_fingerprint": self.system_fingerprint,
-            "usage": {"input_tokens": 1, "output_tokens": 1},
+            "usage": {
+                "input_tokens": self.usage.input_tokens,
+                "output_tokens": self.usage.output_tokens,
+            },
             "output_text": self.output_text,
         }
 
@@ -140,6 +153,12 @@ class _FakeResponses:
             raise RuntimeError("synthetic offline transport failure")
         if self.mode == "access_error":
             raise _AccessFailure("synthetic offline model access failure")
+        if self.mode == "usage_above_request_bytes":
+            return _FakeResponse(
+                materialized,
+                decision="execute",
+                input_tokens=32_769,
+            )
         return _FakeResponse(materialized, decision=self.mode)
 
 
@@ -693,10 +712,51 @@ def test_stage4_usage_above_request_bytes_forfeits_and_is_fatal(
         request_utf8_bytes=10,
     )
 
-    with pytest.raises(BudgetAccountingError):
+    with pytest.raises(BudgetAccountingError) as raised:
         ledger.settle(reservation, input_tokens=11, output_tokens=1)
 
+    assert raised.value.budget_event is not None
+    assert raised.value.budget_event["event"] == "reservation_forfeited"
+    assert raised.value.budget_event["disposition"] == (
+        "provider_usage_above_canonical_request_utf8_byte_bound"
+    )
     assert ledger.snapshot()["reservations_forfeited"] == 1
+    assert audit_budget_ledger(ledger.path)["pass"] is True
+
+
+def test_stage4_usage_forfeiture_event_is_archived_with_provider_response(
+    tmp_path: Path,
+) -> None:
+    ledger = LiveBudgetLedger(
+        tmp_path / "ledger.jsonl",
+        ceiling_nano_usd=MINIMUM_REQUIRED_NANO_USD,
+    )
+    backend = OpenAIResponsesBackend(
+        model_id="gpt-5.5-2026-04-23",
+        raw_log_dir=tmp_path / "raw",
+        client=_FakeClient("usage_above_request_bytes"),
+        sdk_version="offline-test-sdk",
+        budget_ledger=ledger,
+        budget_phase="stage_4_confirmatory",
+    )
+
+    with pytest.raises(BudgetAccountingError) as raised:
+        backend.decide(
+            context=_context(),
+            decision_mode=DecisionMode.EXECUTION_DECISION,
+            candidate_action=_action(),
+            offered_actions=(_action(),),
+            artifact=None,
+            seed=7,
+        )
+
+    response_path = next((tmp_path / "raw").glob("*.response.json"))
+    response_record = json.loads(response_path.read_text(encoding="utf-8"))
+    assert response_record["budget_event"] == raised.value.budget_event
+    assert response_record["budget_event"]["event"] == "reservation_forfeited"
+    assert response_record["budget_event"]["disposition"] == (
+        "provider_usage_above_canonical_request_utf8_byte_bound"
+    )
     assert audit_budget_ledger(ledger.path)["pass"] is True
 
 
@@ -1024,6 +1084,43 @@ def test_executor_counts_response_processing_failure_after_invocation(
     assert sum(len(client.responses.requests) for client in clients) == 1
     assert len(list((inputs.output_path / "raw").rglob("*.error.json"))) == 1
     assert audit_budget_ledger(inputs.ledger_path)["pass"] is True
+
+
+def test_executor_retains_usage_forfeiture_link_and_typed_budget_abort(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = _private_inputs(tmp_path, one_run=True)
+    clients: list[_FakeClient] = []
+    monkeypatch.setattr(
+        execution_module,
+        "stage4_run_bindings_sha256",
+        lambda _rows: "d" * 64,
+    )
+
+    report = _run_stage4_execution_for_test(
+        inputs,
+        _secrets(),
+        backend_factory=_offline_factory(
+            inputs,
+            mode="usage_above_request_bytes",
+            clients=clients,
+        ),
+    )
+
+    assert report["execution_status"] == "INCOMPLETE"
+    assert report["abort_code"] == "stage4_budget_abort_after_attempt"
+    assert report["provider_calls_made"] == 1
+    assert report["attempted_scheduled_runs"] == 1
+    assert report["scheduled_run_records"] == 1
+    response_path = next((inputs.output_path / "raw").rglob("*.response.json"))
+    response_record = json.loads(response_path.read_text(encoding="utf-8"))
+    assert response_record["budget_event"]["event"] == "reservation_forfeited"
+    assert response_record["budget_event"]["disposition"] == (
+        "provider_usage_above_canonical_request_utf8_byte_bound"
+    )
+    assert audit_budget_ledger(inputs.ledger_path)["pass"] is True
+    assert not (inputs.output_path / "execution_complete.json").exists()
 
 
 def test_terminal_budget_audit_must_match_incremental_ledger_bytes(
